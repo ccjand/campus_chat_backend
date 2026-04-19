@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ccj.campus.chat.mapper.LeaveApplicationMapper">
+
+    <resultMap id="BaseResultMap" type="com.ccj.campus.chat.entity.LeaveApplication">
+        <id     column="id"            property="id"/>
+        <result column="applicant_id"  property="applicantId"/>
+        <result column="approver_id"   property="approverId"/>
+        <result column="type"          property="type"/>
+        <result column="reason"        property="reason"/>
+        <result column="start_time"    property="startTime"/>
+        <result column="end_time"      property="endTime"/>
+        <result column="attachments"   property="attachments"
+                typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+        <result column="status"        property="status"/>
+        <result column="approve_note"  property="approveNote"/>
+        <result column="approve_time"  property="approveTime"/>
+        <result column="card_msg_id"   property="cardMsgId"/>
+        <result column="create_time"   property="createTime"/>
+        <result column="update_time"   property="updateTime"/>
+    </resultMap>
+
+    <!-- 对齐论文 5.4：审批人查看待审批列表，利用部分索引 idx_leave_approver_pending -->
+    <select id="listPendingByApprover" resultMap="BaseResultMap">
+        SELECT * FROM leave_application
+        WHERE approver_id = #{approverId}
+          AND status = 0
+        ORDER BY create_time DESC
+    </select>
+
+    <select id="listByApplicant" resultMap="BaseResultMap">
+        SELECT * FROM leave_application
+        WHERE applicant_id = #{applicantId}
+        ORDER BY create_time DESC
+    </select>
+
+</mapper>

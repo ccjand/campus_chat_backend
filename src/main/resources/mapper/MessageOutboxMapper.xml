@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ccj.campus.chat.mapper.MessageOutboxMapper">
+
+    <resultMap id="BaseResultMap" type="com.ccj.campus.chat.entity.MessageOutbox">
+        <id column="id" property="id"/>
+        <result column="topic" property="topic"/>
+        <result column="tag" property="tag"/>
+        <result column="payload" property="payload"/>
+        <result column="status" property="status"/>
+        <result column="retry_count" property="retryCount"/>
+        <result column="next_retry_time" property="nextRetryTime"/>
+        <result column="create_time" property="createTime"/>
+        <result column="send_time" property="sendTime"/>
+    </resultMap>
+
+    <!--
+      扫描待发送的 outbox 记录（对齐论文 1.3 本地消息表异步重试机制）：
+        - status 0: 从未发送
+        - status 2: 上次发送失败，根据 next_retry_time 指数退避
+      利用部分索引 idx_outbox_status_retry 快速定位。
+    -->
+    <select id="scanPending" resultMap="BaseResultMap">
+        SELECT id,
+               topic,
+               tag,
+               CAST(payload AS text) AS payload,
+               status,
+               retry_count,
+               next_retry_time,
+               create_time,
+               send_time
+        FROM mq_outbox
+        WHERE status IN (0, 2)
+          AND (next_retry_time IS NULL OR next_retry_time &lt;= #{now})
+        ORDER BY id
+            LIMIT #{limit}
+    </select>
+
+</mapper>

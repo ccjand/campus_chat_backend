@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ccj.campus.chat.mapper.NoticeReadMapper">
+
+    <!-- PostgreSQL 用 ON CONFLICT 实现 insert ignore -->
+    <insert id="insertIgnore">
+        INSERT INTO notice_read (notice_id, user_id, read_time)
+        VALUES (#{noticeId}, #{userId}, now()) ON CONFLICT (notice_id, user_id) DO NOTHING
+    </insert>
+
+    <select id="countByNotice" resultType="int">
+        SELECT COUNT(*)
+        FROM notice_read
+        WHERE notice_id = #{noticeId}
+    </select>
+
+</mapper>

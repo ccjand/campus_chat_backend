@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ccj.campus.chat.mapper.CheckinSessionMapper">
+
+    <resultMap id="BaseResultMap" type="com.ccj.campus.chat.entity.CheckinSession">
+        <id column="id" property="id"/>
+        <result column="course_id" property="courseId"/>
+        <result column="creator_id" property="creatorId"/>
+        <result column="title" property="title"/>
+        <result column="center_latitude" property="centerLatitude"/>
+        <result column="center_longitude" property="centerLongitude"/>
+        <result column="radius_meters" property="radiusMeters"/>
+        <result column="duration_minutes" property="durationMinutes"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="code" property="code"/>
+        <result column="status" property="status"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id
+        , course_id, creator_id, title,
+        center_latitude, center_longitude, radius_meters, duration_minutes,
+        start_time, end_time, code, status, create_time
+    </sql>
+
+    <!--
+      学生端：取当前进行中的、且该学生所在班级在本次签到覆盖范围内的会话。
+      对齐论文 3.2：教师可对学生提交的补签申请进行审批；
+                   学生端只看自己班级的签到。
+      利用部分索引 idx_checkin_session_course_active 加速。
+    -->
+    <select id="listActiveForStudent" resultMap="BaseResultMap">
+        SELECT DISTINCT
+        <include refid="Base_Column_List"/>
+        FROM checkin_session s
+        JOIN checkin_session_class sc ON sc.session_id = s.id
+        JOIN sys_user_class_rel ur ON ur.class_id = sc.class_id
+        WHERE ur.user_id = #{studentId}
+        AND s.status = 1
+        AND s.end_time &gt; now()
+        ORDER BY s.start_time DESC
+    </select>
+
+    <select id="listClassIdsBySession" resultType="java.lang.Long">
+        SELECT class_id
+        FROM checkin_session_class
+        WHERE session_id = #{sessionId}
+    </select>
+
+    <insert id="batchInsertSessionClass">
+        INSERT INTO checkin_session_class(session_id, class_id) VALUES
+        <foreach collection="classIds" item="cid" separator=",">
+            (#{sessionId}, #{cid})
+        </foreach>
+    </insert>
+
+</mapper>

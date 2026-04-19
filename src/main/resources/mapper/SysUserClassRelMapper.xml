@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ccj.campus.chat.mapper.SysUserClassRelMapper">
+
+    <insert id="insertRel">
+        INSERT INTO sys_user_class_rel (user_id, class_id)
+        VALUES (#{userId}, #{classId}) ON CONFLICT (user_id, class_id) DO NOTHING
+    </insert>
+
+    <delete id="deleteRel">
+        DELETE
+        FROM sys_user_class_rel
+        WHERE user_id = #{userId}
+          AND class_id = #{classId}
+    </delete>
+
+    <select id="listClassIdsByUser" resultType="java.lang.Long">
+        SELECT class_id
+        FROM sys_user_class_rel
+        WHERE user_id = #{userId}
+    </select>
+
+    <select id="listUserIdsByClass" resultType="java.lang.Long">
+        SELECT user_id
+        FROM sys_user_class_rel
+        WHERE class_id = #{classId}
+    </select>
+
+</mapper>

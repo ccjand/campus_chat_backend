@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ccj.campus.chat.mapper.CheckinRecordMapper">
+
+    <resultMap id="BaseResultMap" type="com.ccj.campus.chat.entity.CheckinRecord">
+        <id column="id" property="id"/>
+        <result column="session_id" property="sessionId"/>
+        <result column="student_id" property="studentId"/>
+        <result column="latitude" property="latitude"/>
+        <result column="longitude" property="longitude"/>
+        <result column="distance_m" property="distanceM"/>
+        <result column="status" property="status"/>
+        <result column="checkin_time" property="checkinTime"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id
+        , session_id, student_id, latitude, longitude,
+        distance_m, status, checkin_time
+    </sql>
+
+    <select id="listBySession" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM checkin_record
+        WHERE session_id = #{sessionId}
+        ORDER BY checkin_time ASC
+    </select>
+
+    <select id="selectOneByStudent" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM checkin_record
+        WHERE session_id = #{sessionId}
+        AND student_id = #{studentId}
+        LIMIT 1
+    </select>
+
+</mapper>

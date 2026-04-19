@@ -1,0 +1,84 @@
+server:
+    port: 8080
+    servlet:
+        context-path: /capi
+
+spring:
+    application:
+        name: campus-chat
+    datasource:
+        driver-class-name: org.postgresql.Driver
+        url: jdbc:postgresql://localhost:5432/campus_chat?stringtype=unspecified
+        username: ccj
+        password: 3177587750CCjj+1
+        hikari:
+            maximum-pool-size: 50
+            minimum-idle: 10
+    redis:
+        host: localhost
+        port: 6379
+        database: 0
+        timeout: 5000ms
+        lettuce:
+            pool:
+                max-active: 32
+                max-idle: 16
+                min-idle: 4
+    jackson:
+        date-format: yyyy-MM-dd HH:mm:ss
+        time-zone: Asia/Shanghai
+        default-property-inclusion: non_null
+    servlet:
+        multipart:
+            max-file-size: 50MB
+            max-request-size: 50MB
+
+# ???? 2.4?RocketMQ ???? + ?????
+rocketmq:
+    name-server: 115.190.249.67:9876
+    producer:
+        group: campus_chat_producer
+        send-message-timeout: 10000
+        retry-times-when-send-async-failed: 2
+
+mybatis-plus:
+    mapper-locations: classpath*:/mapper/**/*.xml
+    configuration:
+        map-underscore-to-camel-case: true
+        log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    global-config:
+        db-config:
+            logic-delete-field: deleted
+            logic-delete-value: true
+            logic-not-delete-value: false
+
+# JWT ?? ?? ???? 4.4 ????
+jwt:
+    secret: ${JWT_SECRET:Y2FtcHVzX2NoYXRfcGxhdGZvcm1fc2VjcmV0X2tleV9hdF9sZWFzdF8zMl9ieXRlcw==}
+    issuer: campus-chat
+    expire-days: 7
+
+# MinIO
+minio:
+    endpoint: http://115.190.249.67:19000
+    access-key: ccjj
+    secret-key: 3177587750CCjj+1
+    bucket: campus-chat
+
+# ????
+campus:
+    checkin:
+        # ?? 5.3: ???? 30~100m ??????? 10 ???????
+        max-radius-meters: 500
+        late-minutes: 10
+    message:
+        # ?? 3.2: 2 ??????
+        recall-window-seconds: 120
+    security:
+        login-fail-lock-threshold: 5
+        login-fail-lock-minutes: 5
+
+logging:
+    level:
+        com.ccj.campus.chat: info
+        org.apache.rocketmq: warn

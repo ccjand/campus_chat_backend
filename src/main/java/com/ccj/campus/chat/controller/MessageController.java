@@ -1,0 +1,40 @@
+package com.ccj.campus.chat.controller;
+
+import com.ccj.campus.chat.common.R;
+import com.ccj.campus.chat.dto.ChatMessageDTO;
+import com.ccj.campus.chat.entity.Message;
+import com.ccj.campus.chat.security.LoginUser;
+import com.ccj.campus.chat.service.MessageService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+/**
+ * 消息模块 HTTP 接口。
+ * WebSocket 侧消息收发在 ChatMessageController，这里负责历史查询、离线拉取。
+ */
+@RestController
+@RequestMapping("/message")
+@RequiredArgsConstructor
+public class MessageController {
+
+    private final MessageService messageService;
+
+    /** GET /message/history?roomId=&cursor=&size= */
+    @GetMapping("/history")
+    public R<List<Message>> history(@RequestParam Long roomId,
+                                     @RequestParam(required = false)
+                                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursor,
+                                     @RequestParam(defaultValue = "30") int size) {
+        return R.ok(messageService.pullHistory(roomId, cursor, size));
+    }
+
+    /** GET /message/offline */
+    @GetMapping("/offline")
+    public R<List<ChatMessageDTO>> offline(@RequestParam(defaultValue = "200") int max) {
+        return R.ok(messageService.pullOffline(LoginUser.currentUid(), max));
+    }
+}

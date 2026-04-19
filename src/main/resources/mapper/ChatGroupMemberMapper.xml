@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ccj.campus.chat.mapper.ChatGroupMemberMapper">
+
+    <resultMap id="BaseResultMap" type="com.ccj.campus.chat.entity.ChatGroupMember">
+        <id column="id" property="id"/>
+        <result column="group_id" property="groupId"/>
+        <result column="user_id" property="userId"/>
+        <result column="role" property="role"/>
+        <result column="nickname" property="nickname"/>
+        <result column="join_time" property="joinTime"/>
+    </resultMap>
+
+    <select id="selectByGroupAndUser" resultMap="BaseResultMap">
+        SELECT *
+        FROM chat_group_member
+        WHERE group_id = #{groupId}
+          AND user_id = #{userId} LIMIT 1
+    </select>
+
+    <select id="listMemberUids" resultType="java.lang.Long">
+        SELECT user_id
+        FROM chat_group_member
+        WHERE group_id = #{groupId}
+    </select>
+
+</mapper>
