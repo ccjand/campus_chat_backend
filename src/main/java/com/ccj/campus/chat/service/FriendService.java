@@ -1,5 +1,6 @@
 package com.ccj.campus.chat.service;
 
+import com.ccj.campus.chat.dto.FriendRequestVO;
 import com.ccj.campus.chat.entity.UserBlacklist;
 import com.ccj.campus.chat.entity.UserFriend;
 
@@ -11,6 +12,22 @@ import java.util.List;
  *    支持将指定用户加入黑名单以屏蔽其消息。"
  */
 public interface FriendService {
+    // ==================== 好友申请 ====================
+
+    /** 发送好友申请 */
+    void sendRequest(Long fromId, Long toId, String reason);
+
+    /** 同意好友申请 */
+    void acceptRequest(Long currentUid, Long requestId);
+
+    /** 拒绝好友申请 */
+    void rejectRequest(Long currentUid, Long requestId);
+
+    /** 我收到的好友申请列表（待处理） */
+    List<FriendRequestVO> listReceivedRequests(Long userId);
+
+    /** 我发出的好友申请列表 */
+    List<FriendRequestVO> listSentRequests(Long userId);
 
     /** 添加好友（双向写入） */
     void addFriend(Long userId, Long friendId);

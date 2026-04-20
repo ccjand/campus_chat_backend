@@ -1031,3 +1031,18 @@ ALTER TABLE "public"."sys_class" ADD CONSTRAINT "sys_class_department_id_fkey" F
 -- ----------------------------
 ALTER TABLE "public"."sys_user_class_rel" ADD CONSTRAINT "sys_user_class_rel_class_id_fkey" FOREIGN KEY ("class_id") REFERENCES "public"."sys_class" ("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE "public"."sys_user_class_rel" ADD CONSTRAINT "sys_user_class_rel_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."sys_user" ("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
+
+
+-- 好友申请表
+CREATE TABLE IF NOT EXISTS friend_request (
+                                              id          BIGSERIAL PRIMARY KEY,
+                                              from_id     BIGINT NOT NULL REFERENCES sys_user(id),   -- 申请人
+    to_id       BIGINT NOT NULL REFERENCES sys_user(id),   -- 被申请人
+    reason      VARCHAR(128),                               -- 申请理由
+    status      SMALLINT NOT NULL DEFAULT 0,                -- 0=待处理 1=已同意 2=已拒绝
+    create_time TIMESTAMPTZ NOT NULL DEFAULT now(),
+    update_time TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(from_id, to_id)                                  -- 防止重复申请
+    );
+CREATE INDEX IF NOT EXISTS idx_friend_request_to_status
+    ON friend_request(to_id, status);

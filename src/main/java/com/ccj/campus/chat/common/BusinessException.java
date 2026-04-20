@@ -22,4 +22,10 @@ public class BusinessException extends RuntimeException {
             throw new BusinessException(rc);
         }
     }
+
+    public static void check(boolean condition, ResultCode rc, String msg) {
+        if (!condition) {
+            throw new BusinessException(rc, msg);
+        }
+    }
 }
