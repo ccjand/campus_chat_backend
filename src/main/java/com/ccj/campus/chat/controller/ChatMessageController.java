@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.stereotype.Controller;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.security.Principal;
 import java.time.LocalDateTime;
@@ -24,6 +25,7 @@ public class ChatMessageController {
     private final MessageService messageService;
     private final BadgeService badgeService;
 
+    @Transactional
     @MessageMapping("/chat/send")
     public void handleMessage(ChatMessageDTO msg, Principal principal) {
         Long fromUid = Long.parseLong(principal.getName());

@@ -26,8 +26,9 @@
     <update id="markRoomRead">
         UPDATE chat_contact
         SET last_read_id = last_msg_id
-        WHERE room_id = #{roomId} AND user_id = #{readerId}
-          AND (last_read_id IS NULL OR last_read_id &lt; last_msg_id)
+        WHERE room_id = #{roomId}
+          AND user_id = #{userId}
+          AND (last_read_id IS NULL OR last_msg_id IS NOT NULL AND last_read_id &lt; last_msg_id)
     </update>
 
     <!-- 会话列表带未读数 -->
