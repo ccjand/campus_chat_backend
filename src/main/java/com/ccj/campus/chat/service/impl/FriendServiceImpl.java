@@ -124,7 +124,7 @@ public class FriendServiceImpl implements FriendService {
         // 更新会话最新消息
         messageService.updateLastMsg(room.getId(), msgId);
 
-        // 如果对方在线，推送过去
+        // 在线推送到个人队列，不用广播
         if (onlineUserService.isOnline(req.getFromId())) {
             onlineUserService.push(req.getFromId(), "/queue/messages", greet);
         }
