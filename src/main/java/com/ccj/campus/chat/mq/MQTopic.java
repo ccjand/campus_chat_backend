@@ -9,9 +9,6 @@ package com.ccj.campus.chat.mq;
 public final class MQTopic {
     private MQTopic() {}
 
-    /** 消息异步持久化 */
-    public static final String MSG_PERSIST_TOPIC = "msg-persist-topic";
-
     /** 离线消息补推 */
     public static final String OFFLINE_MSG_TOPIC = "offline-msg-topic";
 

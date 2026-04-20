@@ -14,11 +14,13 @@ import java.util.List;
  *  - 历史消息分页、离线消息补推
  */
 public interface MessageService {
+    void markRoomRead(Long roomId, Long readerId);
+
 
     /** 预分配消息 id，用于 STOMP 推送前回填 */
     Long prepareMessageId();
 
-    /** 异步持久化（MQ 消费者回调） */
+    //消息持久化
     void persist(ChatMessageDTO dto);
 
     /** 更新会话最后一条消息 */

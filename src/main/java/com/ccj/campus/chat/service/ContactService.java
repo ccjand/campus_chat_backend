@@ -29,4 +29,7 @@ public interface ContactService {
 
     /** 免打扰/取消 */
     void setMute(Long userId, Long roomId, boolean mute);
+
+    /** 进入房间时标记整个房间已读 */
+    void markRoomRead(Long roomId, Long userId);
 }

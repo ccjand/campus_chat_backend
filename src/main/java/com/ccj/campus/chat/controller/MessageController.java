@@ -23,6 +23,13 @@ public class MessageController {
 
     private final MessageService messageService;
 
+    /** 进入房间时调用，标记整个房间已读 */
+    @PostMapping("/read/room")
+    public R<Void> markRoomRead(@RequestParam Long roomId) {
+        messageService.markRoomRead(roomId, LoginUser.currentUid());
+        return R.ok();
+    }
+
     /** GET /message/history?roomId=&cursor=&size= */
     @GetMapping("/history")
     public R<List<Message>> history(@RequestParam Long roomId,

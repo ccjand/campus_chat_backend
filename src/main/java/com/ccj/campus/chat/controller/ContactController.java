@@ -35,6 +35,13 @@ public class ContactController {
         return R.ok(contactService.listContacts(LoginUser.currentUid()));
     }
 
+    /** 进入房间时调用，标记整个房间已读 */
+    @PostMapping("/room/read")
+    public R<Void> markRoomRead(@RequestBody @Valid RoomIdReq req) {
+        contactService.markRoomRead(req.getRoomId(), LoginUser.currentUid());
+        return R.ok();
+    }
+
     /** 置顶 / 取消 */
     @PostMapping("/top")
     public R<Void> top(@RequestBody @Valid TopMuteReq req) {
@@ -58,5 +65,10 @@ public class ContactController {
     static class TopMuteReq {
         @NotNull private Long roomId;
         @NotNull private Boolean value;
+    }
+
+    @Data
+    static class RoomIdReq {
+        @NotNull private Long roomId;
     }
 }

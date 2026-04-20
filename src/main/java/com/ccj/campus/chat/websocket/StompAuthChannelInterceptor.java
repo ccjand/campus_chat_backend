@@ -1,11 +1,14 @@
 package com.ccj.campus.chat.websocket;
 
+import com.ccj.campus.chat.dto.ChatMessageDTO;
 import com.ccj.campus.chat.security.LoginUser;
+import com.ccj.campus.chat.service.MessageService;
 import com.ccj.campus.chat.util.JwtUtils;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -13,6 +16,7 @@ import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Component;
@@ -22,14 +26,13 @@ import java.util.List;
 
 /**
  * STOMP 通道拦截器。对齐论文 5.2：
- *  - CONNECT 帧内携带的 Authorization: Bearer <jwt>
- *  - 校验通过后，将用户信息写入 Principal；用于 convertAndSendToUser 路由
- *  - Redis 记录在线状态：ws:uid:{uid} = sessionId，TTL = 心跳周期 * 2
- *  - DISCONNECT 时清理 Redis 在线映射
+ * - CONNECT 帧内携带的 Authorization: Bearer <jwt>
+ * - 校验通过后，将用户信息写入 Principal；用于 convertAndSendToUser 路由
+ * - Redis 记录在线状态：ws:uid:{uid} = sessionId，TTL = 心跳周期 * 2
+ * - DISCONNECT 时清理 Redis 在线映射
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
     public static final String ONLINE_KEY_PREFIX = "ws:uid:";
@@ -37,6 +40,22 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
     private final JwtUtils jwtUtils;
     private final StringRedisTemplate redis;
+    private final MessageService messageService;
+    private final OnlineUserService onlineUserService;
+    private final TaskScheduler taskScheduler;
+
+    public StompAuthChannelInterceptor(
+            JwtUtils jwtUtils,
+            StringRedisTemplate redis,
+            @Lazy MessageService messageService,
+            @Lazy OnlineUserService onlineUserService,
+            @Lazy TaskScheduler taskScheduler) {
+        this.jwtUtils = jwtUtils;
+        this.redis = redis;
+        this.messageService = messageService;
+        this.onlineUserService = onlineUserService;
+        this.taskScheduler = taskScheduler;
+    }
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -92,6 +111,22 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         String sessionId = accessor.getSessionId();
         redis.opsForValue().set(ONLINE_KEY_PREFIX + uid, sessionId, ONLINE_TTL);
         log.info("ws connect: uid={}, sessionId={}", uid, sessionId);
+
+        // 延迟 500ms 补推离线消息，确保 STOMP 订阅已就绪
+        final Long finalUid = uid;
+        taskScheduler.schedule(() -> {
+            try {
+                List<ChatMessageDTO> offlineMsgs = messageService.pullOffline(finalUid, 200);
+                for (ChatMessageDTO m : offlineMsgs) {
+                    onlineUserService.push(finalUid, "/queue/messages", m);
+                }
+                if (!offlineMsgs.isEmpty()) {
+                    log.info("pushed {} offline messages to uid={}", offlineMsgs.size(), finalUid);
+                }
+            } catch (Exception e) {
+                log.error("offline push failed for uid={}: {}", finalUid, e.getMessage());
+            }
+        }, new java.util.Date(System.currentTimeMillis() + 500));
     }
 
     private void ensureAuthenticated(StompHeaderAccessor accessor) {
@@ -122,10 +157,14 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     private String authOf(Integer role) {
         if (role == null) return "ROLE_ANONYMOUS";
         switch (role) {
-            case 1: return "ROLE_STUDENT";
-            case 2: return "ROLE_TEACHER";
-            case 3: return "ROLE_ADMIN";
-            default: return "ROLE_ANONYMOUS";
+            case 1:
+                return "ROLE_STUDENT";
+            case 2:
+                return "ROLE_TEACHER";
+            case 3:
+                return "ROLE_ADMIN";
+            default:
+                return "ROLE_ANONYMOUS";
         }
     }
 }

@@ -6,6 +6,7 @@ import com.ccj.campus.chat.entity.LeaveApplication;
 import com.ccj.campus.chat.entity.LeaveLog;
 import com.ccj.campus.chat.mapper.LeaveApplicationMapper;
 import com.ccj.campus.chat.mapper.LeaveLogMapper;
+import com.ccj.campus.chat.service.BadgeService;
 import com.ccj.campus.chat.service.LeaveService;
 import com.ccj.campus.chat.websocket.OnlineUserService;
 import lombok.RequiredArgsConstructor;
@@ -18,19 +19,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * 请假审批实现。对齐论文 5.4：
- *
- * 状态机流转：
- *   0(待审批) → 1(已通过)   由审批人操作
- *   0(待审批) → 2(已驳回)   由审批人操作，需填写驳回意见
- *   0(待审批) → 3(已撤销)   由申请人操作
- *
- * 交互：
- *   "学生提交请假申请后，服务端通过 WebSocket 向对应教师推送请假卡片。"
- *   "审批人可直接在聊天界面内嵌的请假卡片上完成审批操作。"
- *   "审批结果即时反馈给学生。"
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -39,11 +27,12 @@ public class LeaveServiceImpl implements LeaveService {
     private final LeaveApplicationMapper leaveMapper;
     private final LeaveLogMapper logMapper;
     private final OnlineUserService onlineUserService;
+    private final BadgeService badgeService;
 
     @Override
     @Transactional
     public LeaveApplication apply(Long applicantId, Long approverId, int type,
-                                   String reason, LocalDateTime startTime, LocalDateTime endTime) {
+                                  String reason, LocalDateTime startTime, LocalDateTime endTime) {
         LeaveApplication app = new LeaveApplication();
         app.setApplicantId(applicantId);
         app.setApproverId(approverId);
@@ -56,10 +45,8 @@ public class LeaveServiceImpl implements LeaveService {
         app.setUpdateTime(LocalDateTime.now());
         leaveMapper.insert(app);
 
-        // 写入操作日志
         writeLog(app.getId(), null, LeaveApplication.STATUS_PENDING, applicantId, "提交申请");
 
-        // 对齐论文 5.4：通过 WebSocket 向教师推送请假卡片
         Map<String, Object> card = new HashMap<>();
         card.put("event", "leave_card");
         card.put("leaveId", app.getId());
@@ -70,6 +57,9 @@ public class LeaveServiceImpl implements LeaveService {
         card.put("endTime", endTime.toString());
         card.put("status", LeaveApplication.STATUS_PENDING);
         onlineUserService.push(approverId, "/queue/messages", card);
+
+        // 通知审批人工作台 tab 出现红点
+        badgeService.pushBadgeIfOnline(approverId, 2);
 
         return app;
     }
@@ -82,9 +72,10 @@ public class LeaveServiceImpl implements LeaveService {
         BusinessException.check(app.getStatus() == LeaveApplication.STATUS_PENDING, ResultCode.LEAVE_STATE_INVALID);
 
         transition(app, LeaveApplication.STATUS_APPROVED, approverId, note);
-
-        // 即时反馈给学生
         pushResult(app, "approved", note);
+
+        // 审批后刷新自己的工作台红点（可能清除）
+        badgeService.pushBadgeIfOnline(approverId, 2);
     }
 
     @Override
@@ -95,8 +86,10 @@ public class LeaveServiceImpl implements LeaveService {
         BusinessException.check(app.getStatus() == LeaveApplication.STATUS_PENDING, ResultCode.LEAVE_STATE_INVALID);
 
         transition(app, LeaveApplication.STATUS_REJECTED, approverId, note);
-
         pushResult(app, "rejected", note);
+
+        // 审批后刷新自己的工作台红点
+        badgeService.pushBadgeIfOnline(approverId, 2);
     }
 
     @Override
@@ -107,6 +100,9 @@ public class LeaveServiceImpl implements LeaveService {
         BusinessException.check(app.getStatus() == LeaveApplication.STATUS_PENDING, ResultCode.LEAVE_STATE_INVALID);
 
         transition(app, LeaveApplication.STATUS_REVOKED, applicantId, "学生主动撤回");
+
+        // 撤回后刷新审批人的工作台红点
+        badgeService.pushBadgeIfOnline(app.getApproverId(), 2);
     }
 
     @Override
@@ -119,15 +115,12 @@ public class LeaveServiceImpl implements LeaveService {
         return leaveMapper.listByApplicant(applicantId);
     }
 
-    // ==================== 内部方法 ====================
-
     private LeaveApplication getAndCheck(Long leaveId) {
         LeaveApplication app = leaveMapper.selectById(leaveId);
         BusinessException.check(app != null, ResultCode.NOT_FOUND);
         return app;
     }
 
-    /** 状态机流转核心 */
     private void transition(LeaveApplication app, int toStatus, Long operatorId, String note) {
         int fromStatus = app.getStatus();
         app.setStatus(toStatus);
@@ -135,11 +128,9 @@ public class LeaveServiceImpl implements LeaveService {
         app.setApproveTime(LocalDateTime.now());
         app.setUpdateTime(LocalDateTime.now());
         leaveMapper.updateById(app);
-
         writeLog(app.getId(), fromStatus, toStatus, operatorId, note);
     }
 
-    /** 对齐论文 5.4："每次状态变更均记录操作时间和操作人，形成完整的操作日志" */
     private void writeLog(Long leaveId, Integer from, int to, Long operatorId, String remark) {
         LeaveLog l = new LeaveLog();
         l.setLeaveId(leaveId);
@@ -151,7 +142,6 @@ public class LeaveServiceImpl implements LeaveService {
         logMapper.insert(l);
     }
 
-    /** "审批结果即时反馈给学生" */
     private void pushResult(LeaveApplication app, String action, String note) {
         Map<String, Object> evt = new HashMap<>();
         evt.put("event", "leave_result");

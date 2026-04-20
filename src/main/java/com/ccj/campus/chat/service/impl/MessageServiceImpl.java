@@ -11,6 +11,7 @@ import com.ccj.campus.chat.mapper.ContactMapper;
 import com.ccj.campus.chat.mapper.MessageMapper;
 import com.ccj.campus.chat.mapper.MessageReadMapper;
 import com.ccj.campus.chat.mq.OfflineMessageConsumer;
+import com.ccj.campus.chat.service.BadgeService;
 import com.ccj.campus.chat.service.MessageService;
 import com.ccj.campus.chat.websocket.OnlineUserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -45,6 +46,7 @@ public class MessageServiceImpl implements MessageService {
     private final OnlineUserService onlineUserService;
     private final RedisTemplate<String, String> redisTemplate;
     private final ObjectMapper objectMapper;
+    private final BadgeService badgeService;
 
     /**
      * 对齐论文 3.2: 2 分钟内可撤回
@@ -59,6 +61,12 @@ public class MessageServiceImpl implements MessageService {
             throw new BusinessException(ResultCode.INTERNAL_ERROR);
         }
         return id;
+    }
+
+    @Override
+    public void markRoomRead(Long roomId, Long readerId) {
+        // 直接把 last_read_id 更新为当前 last_msg_id
+        contactMapper.markRoomRead(roomId, readerId);
     }
 
     @Override
@@ -115,6 +123,7 @@ public class MessageServiceImpl implements MessageService {
     @Override
     @Transactional
     public void markRead(Long roomId, Long msgId, Long readerId) {
+        if (msgId == null) return;
         MessageRead r = new MessageRead();
         r.setMsgId(msgId);
         r.setRoomId(roomId);
@@ -123,7 +132,6 @@ public class MessageServiceImpl implements MessageService {
         try {
             readMapper.insert(r);
         } catch (DuplicateKeyException ignore) {
-            // 同一消息多次上报已读，忽略
         }
 
         UpdateWrapper<Contact> w = new UpdateWrapper<>();
@@ -140,6 +148,9 @@ public class MessageServiceImpl implements MessageService {
             evt.put("readerId", readerId);
             onlineUserService.push(m.getFromUid(), "/queue/receipts", evt);
         }
+
+        // 已读后刷新自己的消息 tab 未读数
+        badgeService.pushBadgeIfOnline(readerId, null);
     }
 
     @Override

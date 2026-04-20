@@ -28,13 +28,13 @@ public class ContactServiceImpl implements ContactService {
     public ChatRoom getOrCreateSingleRoom(Long userId, Long friendId) {
         // 用 ext_info 存两个 uid 的排序 key 来做幂等（小id_大id）
         long small = Math.min(userId, friendId);
-        long big   = Math.max(userId, friendId);
+        long big = Math.max(userId, friendId);
         String pairKey = small + "_" + big;
 
         // 先查是否已存在
         QueryWrapper<ChatRoom> qw = new QueryWrapper<>();
         qw.eq("type", ChatRoom.TYPE_SINGLE)
-          .apply("ext_info ->> 'pairKey' = {0}", pairKey);
+                .apply("ext_info ->> 'pairKey' = {0}", pairKey);
         ChatRoom existing = roomMapper.selectOne(qw);
         if (existing != null) return existing;
 
@@ -102,5 +102,10 @@ public class ContactServiceImpl implements ContactService {
         UpdateWrapper<Contact> w = new UpdateWrapper<>();
         w.eq("user_id", userId).eq("room_id", roomId).set("mute", mute);
         contactMapper.update(null, w);
+    }
+
+    @Override
+    public void markRoomRead(Long roomId, Long userId) {
+        contactMapper.markRoomRead(roomId, userId);
     }
 }
