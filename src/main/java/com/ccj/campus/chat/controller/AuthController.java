@@ -32,8 +32,7 @@ public class AuthController {
     @PostMapping("/logout")
     public R<Void> logout(HttpServletRequest request) {
         String header = request.getHeader("Authorization");
-        String token = header != null && header.startsWith("Bearer ")
-                ? header.substring(7) : "";
+        String token = header != null && header.startsWith("Bearer ") ? header.substring(7) : "";
         userService.logout(LoginUser.currentUid(), token);
         return R.ok();
     }

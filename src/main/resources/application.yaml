@@ -8,9 +8,9 @@ spring:
         name: campus-chat
     datasource:
         driver-class-name: org.postgresql.Driver
-        url: jdbc:postgresql://localhost:5432/campus_chat?stringtype=unspecified
-        username: ccj
-        password: 3177587750CCjj+1
+        url: jdbc:postgresql://115.190.249.67:15432/campus_chat?stringtype=unspecified
+        username: root
+        password: 32e1615de259f13b3ad7
         hikari:
             maximum-pool-size: 50
             minimum-idle: 10
@@ -33,7 +33,7 @@ spring:
             max-file-size: 50MB
             max-request-size: 50MB
 
-# ???? 2.4?RocketMQ ???? + ?????
+# RocketMQ
 rocketmq:
     name-server: 115.190.249.67:9876
     producer:
@@ -45,14 +45,14 @@ mybatis-plus:
     mapper-locations: classpath*:/mapper/**/*.xml
     configuration:
         map-underscore-to-camel-case: true
-        log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+        log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
     global-config:
         db-config:
             logic-delete-field: deleted
             logic-delete-value: true
             logic-not-delete-value: false
 
-# JWT ?? ?? ???? 4.4 ????
+#
 jwt:
     secret: ${JWT_SECRET:Y2FtcHVzX2NoYXRfcGxhdGZvcm1fc2VjcmV0X2tleV9hdF9sZWFzdF8zMl9ieXRlcw==}
     issuer: campus-chat
@@ -82,3 +82,5 @@ logging:
     level:
         com.ccj.campus.chat: info
         org.apache.rocketmq: warn
+        com.baomidou.mybatisplus: error
+        com.ccj.campus.chat.mapper: error

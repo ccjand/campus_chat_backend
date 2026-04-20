@@ -1,7 +1,10 @@
 package com.ccj.campus.chat.service;
 
 import com.ccj.campus.chat.dto.UserLoginResp;
+import com.ccj.campus.chat.dto.UserSearchVO;
 import com.ccj.campus.chat.entity.SysUser;
+
+import java.util.List;
 
 /**
  * 用户与认证业务。对齐论文 3.2 + 4.4：
@@ -20,4 +23,7 @@ public interface UserService {
 
     /** 按 id 查询（对外接口返回脱敏后的信息） */
     SysUser getById(Long uid);
+
+    /** 按关键词搜索用户（学号/姓名模糊匹配） */
+    List<UserSearchVO> searchUsers(String keyword, Long currentUid);
 }

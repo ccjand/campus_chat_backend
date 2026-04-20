@@ -1,12 +1,17 @@
 package com.ccj.campus.chat.service.impl;
 
 import cn.hutool.core.util.DesensitizedUtil;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.ccj.campus.chat.common.BusinessException;
 import com.ccj.campus.chat.common.ResultCode;
 import com.ccj.campus.chat.dto.UserLoginResp;
+import com.ccj.campus.chat.dto.UserSearchVO;
+import com.ccj.campus.chat.entity.SysDepartment;
 import com.ccj.campus.chat.entity.SysUser;
+import com.ccj.campus.chat.mapper.SysDepartmentMapper;
 import com.ccj.campus.chat.mapper.SysUserMapper;
 import com.ccj.campus.chat.security.JwtAuthenticationFilter;
+import com.ccj.campus.chat.service.FriendService;
 import com.ccj.campus.chat.service.UserService;
 import com.ccj.campus.chat.util.JwtUtils;
 import lombok.RequiredArgsConstructor;
@@ -16,14 +21,17 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * 用户业务实现。对齐论文 4.4 + 6.2：
- *   - BCrypt 哈希校验（论文：密码以哈希形式存储）
- *   - 连续 5 次错误密码锁定 5 分钟（论文 6.2 测试用例）
- *   - 登出：token 加入 Redis 黑名单
- *   - 脱敏：Hutool DesensitizedUtil
+ * - BCrypt 哈希校验（论文：密码以哈希形式存储）
+ * - 连续 5 次错误密码锁定 5 分钟（论文 6.2 测试用例）
+ * - 登出：token 加入 Redis 黑名单
+ * - 脱敏：Hutool DesensitizedUtil
  */
 @Slf4j
 @Service
@@ -37,6 +45,8 @@ public class UserServiceImpl implements UserService {
     private final JwtUtils jwtUtils;
     private final PasswordEncoder passwordEncoder;
     private final StringRedisTemplate redis;
+    private final SysDepartmentMapper departmentMapper;
+    private final FriendService friendService;
 
     @Value("${campus.security.login-fail-lock-threshold:5}")
     private int lockThreshold;
@@ -102,7 +112,9 @@ public class UserServiceImpl implements UserService {
 
     // ==================== 内部方法 ====================
 
-    /** 对齐论文 6.2 测试用例："连续 5 次错误密码输入后账号锁定 5 分钟" */
+    /**
+     * 对齐论文 6.2 测试用例："连续 5 次错误密码输入后账号锁定 5 分钟"
+     */
     private void handleLoginFail(String accountNumber) {
         String failKey = LOGIN_FAIL_KEY + accountNumber;
         Long count = redis.opsForValue().increment(failKey);
@@ -114,5 +126,41 @@ public class UserServiceImpl implements UserService {
             redis.delete(failKey);
             log.warn("账号 {} 连续登录失败 {} 次，锁定 {} 分钟", accountNumber, count, lockMinutes);
         }
+    }
+
+    @Override
+    public List<UserSearchVO> searchUsers(String keyword, Long currentUid) {
+        if (keyword == null || keyword.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        // 1. 模糊查询（学号或姓名），只查启用用户，排除自己
+        QueryWrapper<SysUser> qw = new QueryWrapper<>();
+        qw.and(w -> w.like("account_number", keyword)
+                        .or().like("name", keyword))
+                .eq("enabled", true)
+                .ne("id", currentUid)
+                .last("LIMIT 20");  // 限制返回数量，防止全表扫描
+
+        List<SysUser> users = userMapper.selectList(qw);
+
+        // 2. 组装 VO，附加好友/黑名单状态
+        return users.stream().map(u -> {
+            // 查院系名称
+            String deptName = null;
+            if (u.getDepartmentId() != null) {
+                SysDepartment dept = departmentMapper.selectById(u.getDepartmentId());
+                if (dept != null) deptName = dept.getName();
+            }
+            return UserSearchVO.builder()
+                    .uid(u.getId())
+                    .accountNumber(u.getAccountNumber())
+                    .name(u.getName())
+                    .role(u.getRole())
+                    .avatar(u.getAvatar())
+                    .departmentName(deptName)
+                    .isFriend(friendService.isFriend(currentUid, u.getId()))
+                    .isBlocked(friendService.isBlocked(currentUid, u.getId()))
+                    .build();
+        }).collect(Collectors.toList());
     }
 }
