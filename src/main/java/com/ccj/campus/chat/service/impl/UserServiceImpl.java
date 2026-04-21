@@ -81,9 +81,18 @@ public class UserServiceImpl implements UserService {
         // 5. 颁发 JWT（对齐论文 3.2：角色信息写入载荷）
         String token = jwtUtils.createToken(user.getId(), user.getRole());
 
+        // 6. 查院系名（供前端"我的"页面展示）
+        String departmentName = null;
+        if (user.getDepartmentId() != null) {
+            SysDepartment dept = departmentMapper.selectById(user.getDepartmentId());
+            if (dept != null) departmentName = dept.getName();
+        }
+
         return UserLoginResp.builder()
                 .uid(user.getId())
                 .name(user.getName())
+                .accountNumber(user.getAccountNumber())
+                .departmentName(departmentName)
                 .avatar(user.getAvatar())
                 .role(user.getRole())
                 .token(token)

@@ -1,6 +1,7 @@
 package com.ccj.campus.chat.controller;
 
 import com.ccj.campus.chat.common.R;
+import com.ccj.campus.chat.dto.ContactVO;
 import com.ccj.campus.chat.entity.ChatRoom;
 import com.ccj.campus.chat.entity.Contact;
 import com.ccj.campus.chat.security.LoginUser;
@@ -29,9 +30,13 @@ public class ContactController {
         return R.ok(contactService.getOrCreateSingleRoom(LoginUser.currentUid(), req.getFriendId()));
     }
 
-    /** 会话列表 */
+    /**
+     * 会话列表。
+     * 返回已在后端 JOIN 好对方昵称 / 头像、最新消息摘要、未读数、时间戳的完整 ContactVO 列表。
+     * 前端直接渲染即可，不需要再请求 /friend/list 或循环调用 /message/history。
+     */
     @GetMapping("/list")
-    public R<List<Contact>> list() {
+    public R<List<ContactVO>> list() {
         return R.ok(contactService.listContacts(LoginUser.currentUid()));
     }
 

@@ -22,29 +22,101 @@
             ) sub
     </select>
 
-    <!-- 进入房间：last_read_id = last_msg_id -->
+    <!--
+      进入房间：把 last_read_id 对齐到 chat_message 表中该房间真实存在的最大消息 id。
+
+      为什么不再用 last_read_id = last_msg_id:
+        chat_message 写入和 chat_contact.last_msg_id 的更新不是同一个事务里完成的
+        （updateLastMsg 是在消息持久化之后异步调的），高并发下可能出现
+        "消息已入库但 last_msg_id 还是旧值" 的瞬间窗口。此时若 markRoomRead
+        触发，就会把一个偏小的 id 写进 last_read_id，导致 unreadCount 清不掉。
+
+      改为直接在数据库层取 MAX(chat_message.id)，和写入消息的事务处于同一数据库
+      视图内，可见性由 MVCC 保证，彻底消除这个竞态。
+
+      COALESCE 兜底：若房间尚无任何消息（MAX 为 NULL），保持 last_read_id 不变。
+    -->
     <update id="markRoomRead">
         UPDATE chat_contact
-        SET last_read_id = last_msg_id
+        SET last_read_id = COALESCE(
+                (SELECT MAX(id) FROM chat_message WHERE room_id = #{roomId}),
+                last_read_id
+                           )
         WHERE room_id = #{roomId}
           AND user_id = #{userId}
-          AND (last_read_id IS NULL OR last_msg_id IS NOT NULL AND last_read_id &lt; last_msg_id)
     </update>
 
-    <!-- 会话列表带未读数 -->
+    <!--
+      一次性拼好首页消息会话列表所需的全部字段，避免前端 N+1：
+        - JOIN chat_room                拿 type
+        - LEFT JOIN chat_group          拿群名 / 群头像（type=2 时生效）
+        - LEFT JOIN sys_user            拿对方昵称 / 头像（type=1 时生效，
+          peer uid 通过 chat_room.ext_info 里创建房间时写入的 uid1/uid2 推导）
+        - LEFT JOIN LATERAL chat_message 拿该房间真实的最新一条消息
+
+          为什么用 LATERAL 而不是 ON m.id = c.last_msg_id：
+            chat_contact.last_msg_id 由 updateLastMsg 异步维护，与 chat_message
+            的 INSERT 不在同一个事务里；极短窗口内可能出现「消息已落库但
+            last_msg_id 还是旧值/NULL」的情况，导致 summary/timestamp 错乱。
+            直接从 chat_message ORDER BY id DESC LIMIT 1 即可拿到权威的最新消息，
+            语义上也和 markRoomRead 里的 MAX(id) 对齐。
+
+        - 相关子查询                    算 unread_count
+
+      排序：top DESC, 最新时间 DESC（符合 /contact/list 验收标准 4）
+    -->
     <select id="listWithUnread" resultType="map">
-        SELECT c.*,
-               COALESCE(
-                       (SELECT COUNT(*) FROM chat_message m
-                        WHERE m.room_id = c.room_id
-                          AND m.is_visible = TRUE
-                          AND m.from_uid != #{userId}
-                AND (c.last_read_id IS NULL OR m.id > c.last_read_id)
-             ), 0
-           ) AS unread
+        SELECT
+            c.id                AS id,
+            c.room_id           AS room_id,
+            c.top               AS top,
+            c.mute              AS mute,
+            c.active_time       AS active_time,
+            r.type              AS type,
+            CASE
+                WHEN r.type = 2 THEN COALESCE(g.name, r.name, '群聊')
+                ELSE             COALESCE(u.name, '未知用户')
+                END                 AS name,
+            CASE
+                WHEN r.type = 2 THEN g.avatar
+                ELSE             u.avatar
+                END                 AS avatar,
+            m.content           AS last_content,
+            m.type              AS last_type,
+            m.status            AS last_status,
+            m.create_time       AS last_time,
+            COALESCE((
+                SELECT COUNT(*)
+                FROM chat_message msg
+                WHERE msg.room_id    = c.room_id
+                  AND msg.is_visible = TRUE
+                  AND msg.from_uid   != #{userId}
+                  AND (c.last_read_id IS NULL OR msg.id > c.last_read_id)
+            ), 0)               AS unread_count
         FROM chat_contact c
+                 INNER JOIN chat_room r
+                            ON r.id = c.room_id
+                 LEFT JOIN chat_group g
+                           ON r.type = 2
+                               AND g.room_id = c.room_id
+                               AND g.deleted = FALSE
+                 LEFT JOIN sys_user u
+                           ON r.type = 1
+                               AND u.id = CASE
+                                              WHEN (r.ext_info ->> 'uid1')::bigint = #{userId}
+                                                  THEN (r.ext_info ->> 'uid2')::bigint
+                                              ELSE     (r.ext_info ->> 'uid1')::bigint
+                                   END
+                 LEFT JOIN LATERAL (
+            SELECT content, type, status, create_time
+            FROM chat_message
+            WHERE room_id = c.room_id
+              AND status != 2
+        ORDER BY id DESC
+            LIMIT 1
+            ) m ON TRUE
         WHERE c.user_id = #{userId}
-        ORDER BY c.top DESC, c.active_time DESC
+        ORDER BY c.top DESC, COALESCE(m.create_time, c.active_time) DESC
     </select>
 
 </mapper>

@@ -1,7 +1,7 @@
 package com.ccj.campus.chat.service;
 
+import com.ccj.campus.chat.dto.ContactVO;
 import com.ccj.campus.chat.entity.ChatRoom;
-import com.ccj.campus.chat.entity.Contact;
 
 import java.util.List;
 
@@ -21,8 +21,11 @@ public interface ContactService {
     /** 为用户创建一条会话记录 */
     void ensureContact(Long userId, Long roomId);
 
-    /** 获取用户的会话列表 */
-    List<Contact> listContacts(Long userId);
+    /**
+     * 获取用户的会话列表（已聚合对方昵称/头像、最新消息摘要、未读数等首页所需字段）。
+     * 所有字段由后端 SQL 一次性 JOIN 得到，前端不再需要额外请求 /friend/list 或 /message/history。
+     */
+    List<ContactVO> listContacts(Long userId);
 
     /** 置顶/取消 */
     void setTop(Long userId, Long roomId, boolean top);
