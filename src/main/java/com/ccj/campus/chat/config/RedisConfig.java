@@ -19,16 +19,9 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
  */
 @Configuration
 public class RedisConfig {
-
-    @Bean
-    public RedisTemplate<String, String> redisTemplate(RedisConnectionFactory factory) {
-        StringRedisTemplate template = new StringRedisTemplate(factory);
-        template.setEnableTransactionSupport(false);
-        return template;
-    }
-
-    @Bean("jsonRedisTemplate")
-    public RedisTemplate<String, Object> jsonRedisTemplate(RedisConnectionFactory factory) {
+    
+    @Bean("redisTemplate")
+    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory factory) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(factory);
 

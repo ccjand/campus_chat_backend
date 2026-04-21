@@ -21,7 +21,7 @@ public class OnlineUserService {
 
     /** 接收方是否在线（对齐论文 5.2 伪代码第一步） */
     public boolean isOnline(Long uid) {
-        return Boolean.TRUE.equals(redis.hasKey(StompAuthChannelInterceptor.ONLINE_KEY_PREFIX + uid));
+        return redis.hasKey(StompAuthChannelInterceptor.ONLINE_KEY_PREFIX + uid);
     }
 
     /** 批量在线判断 */

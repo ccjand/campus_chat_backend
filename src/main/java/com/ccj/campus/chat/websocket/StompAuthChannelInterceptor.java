@@ -8,6 +8,7 @@ import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.Message;
@@ -38,24 +39,22 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     public static final String ONLINE_KEY_PREFIX = "ws:uid:";
     public static final Duration ONLINE_TTL = Duration.ofSeconds(90);
 
-    private final JwtUtils jwtUtils;
-    private final StringRedisTemplate redis;
-    private final MessageService messageService;
-    private final OnlineUserService onlineUserService;
-    private final TaskScheduler taskScheduler;
 
-    public StompAuthChannelInterceptor(
-            JwtUtils jwtUtils,
-            StringRedisTemplate redis,
-            @Lazy MessageService messageService,
-            @Lazy OnlineUserService onlineUserService,
-            @Lazy TaskScheduler taskScheduler) {
-        this.jwtUtils = jwtUtils;
-        this.redis = redis;
-        this.messageService = messageService;
-        this.onlineUserService = onlineUserService;
-        this.taskScheduler = taskScheduler;
-    }
+    @Autowired
+    private JwtUtils jwtUtils;
+
+    @Autowired
+    private StringRedisTemplate redis;
+
+    @Autowired
+    private MessageService messageService;
+
+    @Autowired
+    private OnlineUserService onlineUserService;
+
+    @Autowired
+    private TaskScheduler taskScheduler;
+
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
