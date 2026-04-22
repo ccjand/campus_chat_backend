@@ -1,10 +1,12 @@
 package com.ccj.campus.chat.controller;
 
 import com.ccj.campus.chat.common.R;
+import com.ccj.campus.chat.dto.StudentHistoryCourseVO;
 import com.ccj.campus.chat.entity.CheckinRecord;
 import com.ccj.campus.chat.entity.CheckinSession;
 import com.ccj.campus.chat.entity.CheckinSupplement;
 import com.ccj.campus.chat.security.LoginUser;
+import com.ccj.campus.chat.service.CheckinQrService;
 import com.ccj.campus.chat.service.CheckinService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -13,7 +15,9 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
 import javax.validation.constraints.NotNull;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 签到接口。对齐论文 4.3：
@@ -26,6 +30,7 @@ import java.util.List;
 public class CheckinController {
 
     private final CheckinService checkinService;
+    private final CheckinQrService qrService;
 
     // ==================== 教师端 ====================
 
@@ -45,6 +50,28 @@ public class CheckinController {
     @PostMapping("/teacher/session/{sessionId}/code")
     public R<String> setCode(@PathVariable Long sessionId, @RequestBody CodeReq req) {
         return R.ok(checkinService.setSessionCode(sessionId, req.getCode()));
+    }
+
+    /**
+     * 教师生成/刷新签到二维码。
+     * 返回: { sessionId, content, imageBase64, expireAt }
+     * - content: 二维码原始文本（前端可复制）
+     * - imageBase64: PNG Data URI，可直接放到 <image src=""> 上
+     * - expireAt: 过期时间（秒级 epoch），前端可按此显示倒计时
+     */
+    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_ADMIN')")
+    @PostMapping("/teacher/session/{sessionId}/qrcode")
+    public R<Map<String, Object>> getSessionQr(@PathVariable Long sessionId) {
+        Long uid = LoginUser.currentUid();
+        CheckinQrService.QrContent qr = checkinService.generateSessionQr(uid, sessionId);
+        String image = qrService.generateImageBase64(qr.getContent());
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("sessionId", sessionId);
+        resp.put("content", qr.getContent());
+        resp.put("imageBase64", image);
+        resp.put("expireAt", qr.getExpireAt());
+        return R.ok(resp);
     }
 
     /** 教师查看签到记录 */
@@ -87,6 +114,20 @@ public class CheckinController {
         return R.ok(checkinService.checkinByCode(LoginUser.currentUid(), req.getCode()));
     }
 
+    /** 学生：扫码签到（前端 uni.scanCode 拿到的 content 直接透传上来） */
+    @PreAuthorize("hasAuthority('ROLE_STUDENT')")
+    @PostMapping("/student/checkin/qrcode")
+    public R<CheckinRecord> checkinByQrCode(@RequestBody QrCheckinReq req) {
+        return R.ok(checkinService.checkinByQrCode(LoginUser.currentUid(), req.getContent()));
+    }
+
+    /** 学生：我的签到历史（按课程聚合） */
+    @PreAuthorize("hasAuthority('ROLE_STUDENT')")
+    @GetMapping("/student/history")
+    public R<List<StudentHistoryCourseVO>> history() {
+        return R.ok(checkinService.listHistoryForStudent(LoginUser.currentUid()));
+    }
+
     /** 学生：补签申请 */
     @PreAuthorize("hasAuthority('ROLE_STUDENT')")
     @PostMapping("/student/supplement")
@@ -117,6 +158,9 @@ public class CheckinController {
 
     @Data
     static class CodeReq { private String code; }
+
+    @Data
+    static class QrCheckinReq { private String content; }
 
     @Data
     static class SupplementReq {

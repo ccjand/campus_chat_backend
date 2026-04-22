@@ -71,12 +71,17 @@ campus:
         # ?? 5.3: ???? 30~100m ??????? 10 ???????
         max-radius-meters: 500
         late-minutes: 10
+        qr-secret: "cvfdjnvcdf_csdbcdce3efdsjn1w1hsh"
+        qr-ttl-seconds: 60          # 二维码有效期（秒），前端每 10 秒刷新一次
+        qr-size: 280                # 二维码 PNG 像素尺寸
     message:
         # ?? 3.2: 2 ??????
         recall-window-seconds: 120
     security:
         login-fail-lock-threshold: 5
         login-fail-lock-minutes: 5
+
+
 
 logging:
     level:

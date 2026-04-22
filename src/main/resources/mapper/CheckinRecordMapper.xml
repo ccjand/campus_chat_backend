@@ -37,4 +37,46 @@
         LIMIT 1
     </select>
 
+    <!-- ====================================================================
+         学生历史签到行视图：
+         1) 外层先 DISTINCT ON(session_id) 去重（学生可能同时属于多个班级、
+            同一个 session 绑定了其中多个班级，会产生重复行）；
+         2) 再套一层按 start_time DESC 排序并截 200 条。
+         3) LEFT JOIN checkin_record 取该学生对该会话的签到状态，
+            未签则为 null，由 Service 层转换成 checkedIn=false。
+         对齐论文 3.2：学生只能看到自己班级覆盖的签到会话。
+    ==================================================================== -->
+    <resultMap id="HistoryRowMap" type="com.ccj.campus.chat.dto.StudentCheckinHistoryRow">
+        <result column="session_id"    property="sessionId"/>
+        <result column="course_id"     property="courseId"/>
+        <result column="course_name"   property="courseName"/>
+        <result column="session_title" property="sessionTitle"/>
+        <result column="start_time"    property="startTime"/>
+        <result column="end_time"      property="endTime"/>
+        <result column="rec_status"    property="recStatus"/>
+        <result column="check_in_time" property="checkInTime"/>
+    </resultMap>
+
+    <select id="listHistoryByStudent" resultMap="HistoryRowMap">
+        SELECT * FROM (
+                          SELECT DISTINCT ON (s.id)
+                              s.id            AS session_id,
+                              s.course_id     AS course_id,
+                              c.name          AS course_name,
+                              s.title         AS session_title,
+                              s.start_time    AS start_time,
+                              s.end_time      AS end_time,
+                              r.status        AS rec_status,
+                              r.checkin_time  AS check_in_time
+                          FROM checkin_session s
+                              JOIN checkin_session_class sc ON sc.session_id = s.id
+                              JOIN sys_user_class_rel ur    ON ur.class_id = sc.class_id AND ur.user_id = #{studentId}
+                              JOIN course c                 ON c.id = s.course_id
+                              LEFT JOIN checkin_record r    ON r.session_id = s.id AND r.student_id = #{studentId}
+                          ORDER BY s.id, s.start_time DESC
+                      ) t
+        ORDER BY t.start_time DESC
+            LIMIT 200
+    </select>
+
 </mapper>

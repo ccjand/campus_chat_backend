@@ -3,12 +3,16 @@ package com.ccj.campus.chat.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.ccj.campus.chat.common.BusinessException;
 import com.ccj.campus.chat.common.ResultCode;
+import com.ccj.campus.chat.dto.StudentCheckinHistoryRow;
+import com.ccj.campus.chat.dto.StudentHistoryCourseVO;
+import com.ccj.campus.chat.dto.StudentHistoryRecordVO;
 import com.ccj.campus.chat.entity.CheckinRecord;
 import com.ccj.campus.chat.entity.CheckinSession;
 import com.ccj.campus.chat.entity.CheckinSupplement;
 import com.ccj.campus.chat.mapper.CheckinRecordMapper;
 import com.ccj.campus.chat.mapper.CheckinSessionMapper;
 import com.ccj.campus.chat.mapper.CheckinSupplementMapper;
+import com.ccj.campus.chat.service.CheckinQrService;
 import com.ccj.campus.chat.service.CheckinService;
 import com.ccj.campus.chat.util.GeoUtils;
 import com.ccj.campus.chat.websocket.OnlineUserService;
@@ -22,9 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * 签到业务实现。对齐论文 5.3：
@@ -42,9 +44,90 @@ public class CheckinServiceImpl implements CheckinService {
     private final CheckinRecordMapper recordMapper;
     private final CheckinSupplementMapper supplementMapper;
     private final OnlineUserService onlineUserService;
+    private final CheckinQrService qrService;
 
     @Value("${campus.checkin.late-minutes:10}")
     private int lateMinutes;
+
+    // ==================== 教师：二维码 ====================
+
+    @Override
+    public CheckinQrService.QrContent generateSessionQr(Long teacherId, Long sessionId) {
+        CheckinSession session = sessionMapper.selectById(sessionId);
+        BusinessException.check(session != null, ResultCode.NOT_FOUND);
+        // 仅会话创建者可刷新自己的二维码
+        BusinessException.check(session.getCreatorId().equals(teacherId), ResultCode.FORBIDDEN);
+        BusinessException.check(session.getStatus() == CheckinSession.STATUS_ACTIVE,
+                ResultCode.CHECKIN_SESSION_ENDED);
+        if (session.getEndTime() != null && LocalDateTime.now().isAfter(session.getEndTime())) {
+            throw new BusinessException(ResultCode.CHECKIN_SESSION_ENDED);
+        }
+        return qrService.generate(sessionId);
+    }
+
+// ==================== 学生：扫码签到 ====================
+
+    @Override
+    @Transactional
+    public CheckinRecord checkinByQrCode(Long studentId, String qrContent) {
+        Long sessionId = qrService.verify(qrContent);
+
+        CheckinSession session = sessionMapper.selectById(sessionId);
+        BusinessException.check(session != null, ResultCode.NOT_FOUND);
+        BusinessException.check(session.getStatus() == CheckinSession.STATUS_ACTIVE,
+                ResultCode.CHECKIN_SESSION_ENDED);
+        if (session.getEndTime() != null && LocalDateTime.now().isAfter(session.getEndTime())) {
+            throw new BusinessException(ResultCode.CHECKIN_SESSION_ENDED);
+        }
+
+        // 扫码签到不做距离校验（与签到码签到一致，二维码的 TTL 已提供防远程转发保护）
+        Duration elapsed = Duration.between(session.getStartTime(), LocalDateTime.now());
+        int status = elapsed.toMinutes() >= lateMinutes
+                ? CheckinRecord.STATUS_LATE
+                : CheckinRecord.STATUS_NORMAL;
+
+        CheckinRecord record = new CheckinRecord();
+        record.setSessionId(session.getId());
+        record.setStudentId(studentId);
+        record.setStatus(status);
+        record.setCheckinTime(LocalDateTime.now());
+
+        try {
+            recordMapper.insert(record);
+        } catch (DuplicateKeyException e) {
+            throw new BusinessException(ResultCode.CHECKIN_DUPLICATE);
+        }
+        return record;
+    }
+
+// ==================== 学生：历史记录 ====================
+
+    @Override
+    public List<StudentHistoryCourseVO> listHistoryForStudent(Long studentId) {
+        List<StudentCheckinHistoryRow> rows = recordMapper.listHistoryByStudent(studentId);
+
+        // 用 LinkedHashMap 保留查询顺序（Mapper 已按 start_time DESC 排好）
+        LinkedHashMap<Long, StudentHistoryCourseVO> grouped = new LinkedHashMap<>();
+        for (StudentCheckinHistoryRow row : rows) {
+            StudentHistoryCourseVO courseVo = grouped.computeIfAbsent(row.getCourseId(), cid -> {
+                StudentHistoryCourseVO vo = new StudentHistoryCourseVO();
+                vo.setCourseId(cid);
+                vo.setCourseName(row.getCourseName());
+                return vo;
+            });
+
+            StudentHistoryRecordVO rec = new StudentHistoryRecordVO();
+            rec.setSessionId(row.getSessionId());
+            rec.setSessionTitle(row.getSessionTitle());
+            rec.setStartTime(row.getStartTime());
+            rec.setEndTime(row.getEndTime());
+            rec.setCheckedIn(row.getRecStatus() != null);
+            rec.setStatus(row.getRecStatus());
+            rec.setCheckInTime(row.getCheckInTime());
+            courseVo.getRecords().add(rec);
+        }
+        return new ArrayList<>(grouped.values());
+    }
 
     // ==================== 教师端 ====================
 
