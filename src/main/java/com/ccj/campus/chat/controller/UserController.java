@@ -24,4 +24,10 @@ public class UserController {
     public R<List<UserSearchVO>> search(@RequestParam String keyword) {
         return R.ok(userService.searchUsers(keyword, LoginUser.currentUid()));
     }
+
+    /** 获取所有可选审批人（教师或辅导员） */
+    @GetMapping("/approvers")
+    public R<List<UserSearchVO>> getApprovers() {
+        return R.ok(userService.getApprovers());
+    }
 }

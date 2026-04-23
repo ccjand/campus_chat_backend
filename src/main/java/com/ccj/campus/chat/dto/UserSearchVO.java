@@ -1,12 +1,16 @@
 package com.ccj.campus.chat.dto;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
 @Builder
+@AllArgsConstructor
+@NoArgsConstructor
 public class UserSearchVO {
-    private Long uid;
+    private Long userId;
     private String accountNumber;  // 学号/工号
     private String name;
     private Integer role;          // 1=学生 2=教师 3=管理员

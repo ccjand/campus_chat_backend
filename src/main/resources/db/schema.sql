@@ -368,6 +368,7 @@ CREATE TABLE "public"."checkin_record" (
                                            "longitude" numeric(10,7),
                                            "distance_m" int4,
                                            "status" int2 NOT NULL,
+                                            "type" int2 NOT NULL DEFAULT 1,
                                            "checkin_time" timestamp(6) NOT NULL DEFAULT now()
 )
 ;

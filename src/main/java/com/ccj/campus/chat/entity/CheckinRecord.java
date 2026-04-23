@@ -22,6 +22,13 @@ public class CheckinRecord implements Serializable {
     public static final int STATUS_ABNORMAL     = 4;
     public static final int STATUS_SUPPLEMENTED = 5;
 
+    // ======== 新增的签到类型常量 ========
+    public static final int TYPE_LOCATION   = 1; // 定位签到
+    public static final int TYPE_CODE       = 2; // 签到码签到
+    public static final int TYPE_QR         = 3; // 扫码签到
+    public static final int TYPE_SUPPLEMENT = 4; // 补签
+    // ===================================
+
     @TableId(type = IdType.AUTO)
     private Long id;
 
@@ -31,5 +38,6 @@ public class CheckinRecord implements Serializable {
     private BigDecimal longitude;
     private Integer distanceM;
     private Integer status;
+    private Integer type; // <--- 新增的签到类型字段
     private LocalDateTime checkinTime;
 }

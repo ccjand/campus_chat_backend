@@ -33,9 +33,9 @@ public class MessageController {
     /** GET /message/history?roomId=&cursor=&size= */
     @GetMapping("/history")
     public R<List<Message>> history(@RequestParam Long roomId,
-                                     @RequestParam(required = false)
-                                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursor,
-                                     @RequestParam(defaultValue = "30") int size) {
+                                    @RequestParam(required = false)
+                                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursor,
+                                    @RequestParam(defaultValue = "30") int size) {
         return R.ok(messageService.pullHistory(roomId, cursor, size));
     }
 
@@ -43,5 +43,18 @@ public class MessageController {
     @GetMapping("/offline")
     public R<List<ChatMessageDTO>> offline(@RequestParam(defaultValue = "200") int max) {
         return R.ok(messageService.pullOffline(LoginUser.currentUid(), max));
+    }
+
+    /**
+     * GET /message/since?roomId=&sinceId=&limit=
+     * 增量拉取：拉取 id 严格大于 sinceId 的可见消息。
+     * 前端用法：断线重连或从后台恢复时，以本地最后一条真实消息的 id 作为 sinceId，
+     * 调用本接口补齐掉线期间漏收的消息。
+     */
+    @GetMapping("/since")
+    public R<List<Message>> since(@RequestParam Long roomId,
+                                  @RequestParam Long sinceId,
+                                  @RequestParam(defaultValue = "200") int limit) {
+        return R.ok(messageService.listSince(roomId, sinceId, limit));
     }
 }

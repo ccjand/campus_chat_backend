@@ -26,4 +26,8 @@ public interface UserService {
 
     /** 按关键词搜索用户（学号/姓名模糊匹配） */
     List<UserSearchVO> searchUsers(String keyword, Long currentUid);
+
+
+    /** 获取所有可选审批人（教师或辅导员） */
+    List<UserSearchVO> getApprovers();
 }

@@ -57,4 +57,22 @@
           AND status = 0
     </update>
 
+    <!--
+      增量拉取：id > sinceId 的可见消息，按 id 升序。
+      用于前端断线/后台恢复后的 gap 补齐。
+      与 pullHistory 使用 create_time 分页不同，这里用 id 分页：
+        - id 严格单调递增，不存在同一时刻多条消息的边界问题
+        - 与前端"本地最后一条消息 id"对齐，语义更直接
+    -->
+    <select id="listSince" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM chat_message
+        WHERE room_id = #{roomId}
+        AND is_visible = TRUE
+        AND id &gt; #{sinceId}
+        ORDER BY id ASC
+        LIMIT #{size}
+    </select>
+
 </mapper>

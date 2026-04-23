@@ -25,4 +25,12 @@ public interface MessageMapper extends BaseMapper<Message> {
      * 撤回（软删除）
      */
     int recall(@Param("id") Long id, @Param("uid") Long uid);
+
+    /**
+     * 增量拉取：拉取 id 严格大于 sinceId 的可见消息，按 id 升序。
+     * 用于前端断线重连 / 从后台回前台时的 gap 补齐。
+     */
+    List<Message> listSince(@Param("roomId") Long roomId,
+                            @Param("sinceId") Long sinceId,
+                            @Param("size") int size);
 }

@@ -23,4 +23,5 @@ public class UserLoginResp {
     private Integer role;
 
     private String token;
+
 }

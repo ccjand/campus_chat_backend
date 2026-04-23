@@ -37,4 +37,10 @@ public interface MessageService {
 
     /** 上线后拉取离线消息 */
     List<ChatMessageDTO> pullOffline(Long uid, int max);
+
+    /**
+     * 增量拉取：拉取 id 严格大于 sinceId 的可见消息，按 id 升序。
+     * 用于前端断线重连 / 从后台回前台时补齐漏收的消息。
+     */
+    List<Message> listSince(Long roomId, Long sinceId, int size);
 }

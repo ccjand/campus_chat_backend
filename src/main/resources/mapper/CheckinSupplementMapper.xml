@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ccj.campus.chat.mapper.CheckinSupplementMapper">
+
+    <!--
+      列出某老师发起的所有签到 (checkin_session.creator_id = teacherId) 被学生提交的补签申请。
+      一次 JOIN 拼齐前端展示所需的全部字段：
+        - 补签本身：id / reason / status / create_time
+        - 会话信息：session_id / title / start_time / course_id / course_name
+        - 申请学生信息：student_id / name / account_number / avatar
+      排序：pending 的排在前面（status=0 最小），同状态内按申请时间倒序。
+    -->
+    <select id="listByTeacher" resultType="map">
+        SELECT
+        s.id AS supplement_id,
+        s.session_id AS session_id,
+        s.student_id AS student_id,
+        s.reason AS reason,
+        s.status AS status,
+        s.approve_note AS approve_note,
+        s.create_time AS create_time,
+
+        u.name AS student_name,
+        u.account_number AS student_account_number,
+        u.avatar AS student_avatar,
+
+        ses.title AS session_title,
+        ses.start_time AS session_start_time,
+        ses.course_id AS course_id,
+        c.name AS course_name
+        FROM checkin_supplement s
+        INNER JOIN checkin_session ses ON s.session_id = ses.id
+        LEFT JOIN course c ON ses.course_id = c.id
+        LEFT JOIN sys_user u ON s.student_id = u.id
+        WHERE ses.creator_id = #{teacherId}
+        <if test="pendingOnly">
+            AND s.status = 0
+        </if>
+        ORDER BY s.status ASC, s.create_time DESC
+        LIMIT 200
+    </select>
+
+</mapper>

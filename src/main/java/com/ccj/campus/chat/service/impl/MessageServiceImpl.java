@@ -90,6 +90,14 @@ public class MessageServiceImpl implements MessageService {
     }
 
     @Override
+    public List<Message> listSince(Long roomId, Long sinceId, int size) {
+        if (roomId == null || sinceId == null) return java.util.Collections.emptyList();
+        // 上限保护：避免前端传 limit=99999 把服务端 OOM
+        int capped = Math.min(Math.max(size, 1), 500);
+        return messageMapper.listSince(roomId, sinceId, capped);
+    }
+
+    @Override
     public void updateLastMsg(Long roomId, Long msgId) {
         UpdateWrapper<Contact> w = new UpdateWrapper<>();
         w.eq("room_id", roomId)

@@ -11,6 +11,7 @@ import com.ccj.campus.chat.entity.SysUser;
 import com.ccj.campus.chat.mapper.SysDepartmentMapper;
 import com.ccj.campus.chat.mapper.SysUserMapper;
 import com.ccj.campus.chat.security.JwtAuthenticationFilter;
+import com.ccj.campus.chat.security.LoginUser;
 import com.ccj.campus.chat.service.FriendService;
 import com.ccj.campus.chat.service.UserService;
 import com.ccj.campus.chat.util.JwtUtils;
@@ -21,6 +22,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -53,6 +55,41 @@ public class UserServiceImpl implements UserService {
 
     @Value("${campus.security.login-fail-lock-minutes:5}")
     private int lockMinutes;
+
+    @Override
+    public List<UserSearchVO> getApprovers() {
+        Long currentUid = LoginUser.currentUid();
+        SysUser currentUser = userMapper.selectById(currentUid);
+
+        List<SysUser> approvers = new ArrayList<>();
+
+        // ================= 开始：核心过滤逻辑 =================
+        if (currentUser.getRole() == SysUser.ROLE_STUDENT) {
+            // 1. 学生：只能向【本学院】的【辅导员】请假
+            approvers = userMapper.selectList(new QueryWrapper<SysUser>()
+                    .eq("role", SysUser.ROLE_ADMIN)
+                    .eq("department_id", currentUser.getDepartmentId())
+                    .like("name", "辅导")); // 用名字区分辅导员
+
+        } else if (currentUser.getRole() == SysUser.ROLE_TEACHER || currentUser.getRole() == SysUser.ROLE_ADMIN) {
+            // 2. 老师和辅导员：只能向【本学院】的【院长】请假
+            approvers = userMapper.selectList(new QueryWrapper<SysUser>()
+                    .eq("role", SysUser.ROLE_ADMIN)
+                    .eq("department_id", currentUser.getDepartmentId())
+                    .like("name", "院长")); // 用名字区分院长
+        }
+        // ================= 结束：核心过滤逻辑 =================
+
+        return approvers.stream().map(user -> {
+            UserSearchVO vo = new UserSearchVO();
+            vo.setUserId(user.getId());
+            vo.setAccountNumber(user.getAccountNumber());
+            vo.setName(user.getName());
+            vo.setAvatar(user.getAvatar());
+            // 如果你的VO有departmentName也可以在这查出来设置上
+            return vo;
+        }).collect(Collectors.toList());
+    }
 
     @Override
     public UserLoginResp login(String accountNumber, String password) {
@@ -161,7 +198,7 @@ public class UserServiceImpl implements UserService {
                 if (dept != null) deptName = dept.getName();
             }
             return UserSearchVO.builder()
-                    .uid(u.getId())
+                    .userId(u.getId())
                     .accountNumber(u.getAccountNumber())
                     .name(u.getName())
                     .role(u.getRole())

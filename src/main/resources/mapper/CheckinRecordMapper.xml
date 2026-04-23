@@ -11,13 +11,14 @@
         <result column="longitude" property="longitude"/>
         <result column="distance_m" property="distanceM"/>
         <result column="status" property="status"/>
+        <result column="type" property="type"/> <!-- 新增映射 -->
         <result column="checkin_time" property="checkinTime"/>
     </resultMap>
 
     <sql id="Base_Column_List">
         id
         , session_id, student_id, latitude, longitude,
-        distance_m, status, checkin_time
+        distance_m, status, type, checkin_time
     </sql>
 
     <select id="listBySession" resultMap="BaseResultMap">

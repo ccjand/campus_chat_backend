@@ -1,17 +1,13 @@
 package com.ccj.campus.chat.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.ccj.campus.chat.common.BusinessException;
 import com.ccj.campus.chat.common.ResultCode;
-import com.ccj.campus.chat.dto.StudentCheckinHistoryRow;
-import com.ccj.campus.chat.dto.StudentHistoryCourseVO;
-import com.ccj.campus.chat.dto.StudentHistoryRecordVO;
-import com.ccj.campus.chat.entity.CheckinRecord;
-import com.ccj.campus.chat.entity.CheckinSession;
-import com.ccj.campus.chat.entity.CheckinSupplement;
-import com.ccj.campus.chat.mapper.CheckinRecordMapper;
-import com.ccj.campus.chat.mapper.CheckinSessionMapper;
-import com.ccj.campus.chat.mapper.CheckinSupplementMapper;
+import com.ccj.campus.chat.dto.*;
+import com.ccj.campus.chat.entity.*;
+import com.ccj.campus.chat.mapper.*;
+import com.ccj.campus.chat.service.BadgeService;
 import com.ccj.campus.chat.service.CheckinQrService;
 import com.ccj.campus.chat.service.CheckinService;
 import com.ccj.campus.chat.util.GeoUtils;
@@ -27,13 +23,14 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 签到业务实现。对齐论文 5.3：
- *   - 球面距离判断（GeoUtils，公式 5.1）
- *   - 超过 10 分钟标记迟到
- *   - 坐标异常跳变检测
- *   - 签到会话 ID + 学生 ID 联合唯一约束杜绝重复
+ * - 球面距离判断（GeoUtils，公式 5.1）
+ * - 超过 10 分钟标记迟到
+ * - 坐标异常跳变检测
+ * - 签到会话 ID + 学生 ID 联合唯一约束杜绝重复
  */
 @Slf4j
 @Service
@@ -45,9 +42,186 @@ public class CheckinServiceImpl implements CheckinService {
     private final CheckinSupplementMapper supplementMapper;
     private final OnlineUserService onlineUserService;
     private final CheckinQrService qrService;
+    private final CourseMapper courseMapper;
+    private final CourseClassRelMapper courseClassRelMapper;
+    private final SysClassMapper sysClassMapper;
+    private final SysUserMapper sysUserMapper;
+    private final BadgeService badgeService;
+    private final SysUserClassRelMapper sysUserClassRelMapper;
+    private final LeaveApplicationMapper leaveApplicationMapper;
+    private final SysUserMapper userMapper;
+    private final CheckinSessionMapper checkinSessionMapper;
+    private final CheckinRecordMapper checkinRecordMapper;
 
     @Value("${campus.checkin.late-minutes:10}")
     private int lateMinutes;
+
+
+    @Override
+    public List<com.ccj.campus.chat.dto.StudentCheckinStatusVO> getSessionStudentStatus(Long sessionId) {
+        // 1. 获取签到任务信息
+        CheckinSession session = checkinSessionMapper.selectById(sessionId);
+        if (session == null) {
+            return java.util.Collections.emptyList();
+        }
+
+        // 2. 查出该签到任务涉及的所有学生 (通过 sys_user_class_rel 和 sys_checkin_session_class 联查)
+        List<SysUser> students = userMapper.selectList(new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<SysUser>()
+                .inSql("id", "SELECT user_id FROM sys_user_class_rel WHERE class_id IN " +
+                        "(SELECT class_id FROM sys_checkin_session_class WHERE session_id = " + sessionId + ")")
+                .eq("role", SysUser.ROLE_STUDENT));
+
+        if (students.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+
+        // 3. 获取这些学生的签到记录
+        List<CheckinRecord> records = checkinRecordMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<CheckinRecord>()
+                        .eq("session_id", sessionId));
+        java.util.Map<Long, CheckinRecord> recordMap = records.stream()
+                .collect(java.util.stream.Collectors.toMap(CheckinRecord::getStudentId, r -> r, (r1, r2) -> r1));
+
+        // 4. 获取这些学生的请假记录（检查签到时间是否在请假范围内，且请假已通过 status=1）
+        java.time.LocalDateTime checkTime = session.getStartTime() != null ? session.getStartTime() : session.getCreateTime();
+        List<com.ccj.campus.chat.entity.LeaveApplication> leaves = leaveApplicationMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<com.ccj.campus.chat.entity.LeaveApplication>()
+                        .eq("status", 1)
+                        .le("start_time", checkTime)
+                        .ge("end_time", checkTime));
+        java.util.Map<Long, com.ccj.campus.chat.entity.LeaveApplication> leaveMap = leaves.stream()
+                .collect(java.util.stream.Collectors.toMap(com.ccj.campus.chat.entity.LeaveApplication::getApplicantId, l -> l, (l1, l2) -> l1));
+
+        // 5. 组装VO并返回
+        return students.stream().map(student -> {
+            com.ccj.campus.chat.dto.StudentCheckinStatusVO vo = new com.ccj.campus.chat.dto.StudentCheckinStatusVO();
+            vo.setStudentId(student.getId());
+            vo.setStudentName(student.getName());
+            vo.setAccountNumber(student.getAccountNumber());
+
+            if (leaveMap.containsKey(student.getId())) {
+                vo.setStatus(3); // 已请假
+            } else if (recordMap.containsKey(student.getId())) {
+                vo.setStatus(1); // 已签到
+            } else {
+                vo.setStatus(0); // 未签到
+            }
+            return vo;
+        }).collect(java.util.stream.Collectors.toList());
+    }
+
+
+    private static Long toLong(Object v) {
+        if (v == null) return null;
+        if (v instanceof Long) return (Long) v;
+        if (v instanceof Number) return ((Number) v).longValue();
+        try {
+            return Long.parseLong(String.valueOf(v));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static Integer toInt(Object v) {
+        if (v == null) return null;
+        if (v instanceof Integer) return (Integer) v;
+        if (v instanceof Number) return ((Number) v).intValue();
+        try {
+            return Integer.parseInt(String.valueOf(v));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static java.time.LocalDateTime toLocalDateTime(Object v) {
+        if (v == null) return null;
+        if (v instanceof java.time.LocalDateTime) return (java.time.LocalDateTime) v;
+        if (v instanceof java.sql.Timestamp) return ((java.sql.Timestamp) v).toLocalDateTime();
+        return null;
+    }
+
+    @Override
+    public List<CheckinSupplement> listSupplementsForStudent(Long studentId) {
+        if (studentId == null) return Collections.emptyList();
+        // 按照创建时间倒序查询该学生的所有补签记录
+        LambdaQueryWrapper<CheckinSupplement> qw = new LambdaQueryWrapper<>();
+        qw.eq(CheckinSupplement::getStudentId, studentId)
+                .orderByDesc(CheckinSupplement::getCreateTime);
+        return supplementMapper.selectList(qw);
+    }
+
+    @Override
+    public List<TeacherSupplementVO> listSupplementsForTeacher(Long teacherId, boolean pendingOnly) {
+        if (teacherId == null) return Collections.emptyList();
+        List<Map<String, Object>> rows = supplementMapper.listByTeacher(teacherId, pendingOnly);
+        if (rows == null || rows.isEmpty()) return Collections.emptyList();
+
+        List<TeacherSupplementVO> result = new ArrayList<>(rows.size());
+        for (Map<String, Object> row : rows) {
+            result.add(TeacherSupplementVO.builder()
+                    .id(toLong(row.get("supplement_id"))) // 新增：映射 id
+                    .supplementId(toLong(row.get("supplement_id")))
+                    .sessionId(toLong(row.get("session_id")))
+                    .studentId(toLong(row.get("student_id")))
+                    .studentName((String) row.get("student_name"))
+                    .studentNo((String) row.get("student_account_number")) // 新增：映射学号
+                    .studentAccountNumber((String) row.get("student_account_number"))
+                    .studentAvatar((String) row.get("student_avatar"))
+                    .courseId(toLong(row.get("course_id")))
+                    .courseName((String) row.get("course_name"))
+                    .sessionTitle((String) row.get("session_title"))
+                    .sessionStartTime(toLocalDateTime(row.get("session_start_time")))
+                    .reason((String) row.get("reason"))
+                    .status(toInt(row.get("status")))
+                    .approveNote((String) row.get("approve_note")) // 新增：映射审批意见
+                    .createTime(toLocalDateTime(row.get("create_time")))
+                    .build());
+        }
+        return result;
+    }
+
+    @Override
+    public List<CourseClassVO> listCourseClasses(Long teacherId, Long courseId) {
+        if (courseId == null) return Collections.emptyList();
+
+        // 顺带校验一下：非管理员时，课程必须是该老师自己的
+        Course course = courseMapper.selectById(courseId);
+        BusinessException.check(course != null, ResultCode.NOT_FOUND, "课程不存在");
+        // 管理员角色在 Controller 层已允许访问，这里只兜底校验普通老师不能看别人的课
+        // 若你想彻底开放给 ADMIN，可在 Controller 层带 role 进来再判断
+        // 这里保守做法：只要 creator 就行
+        if (!course.getTeacherId().equals(teacherId)) {
+            // 不抛异常，返回空列表，避免无关紧要的场景打断流程
+            return Collections.emptyList();
+        }
+
+        List<Long> classIds = courseClassRelMapper.listClassIdsByCourse(courseId);
+        if (classIds == null || classIds.isEmpty()) return Collections.emptyList();
+
+        // 一次 selectBatchIds 拉齐名称
+        List<SysClass> classes = sysClassMapper.selectBatchIds(classIds);
+        if (classes == null) return Collections.emptyList();
+        return classes.stream()
+                .map(c -> CourseClassVO.builder()
+                        .classId(c.getId())
+                        .className(c.getName())
+                        .grade(c.getGrade())
+                        .build())
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<TeacherCourseVO> listTeacherCourses(Long teacherId) {
+        if (teacherId == null) return Collections.emptyList();
+        List<Course> courses = courseMapper.listByTeacher(teacherId);
+        if (courses == null || courses.isEmpty()) return Collections.emptyList();
+        return courses.stream()
+                .map(c -> TeacherCourseVO.builder()
+                        .courseId(c.getId())
+                        .courseName(c.getName())
+                        .build())
+                .collect(Collectors.toList());
+    }
 
     // ==================== 教师：二维码 ====================
 
@@ -87,6 +261,7 @@ public class CheckinServiceImpl implements CheckinService {
                 : CheckinRecord.STATUS_NORMAL;
 
         CheckinRecord record = new CheckinRecord();
+        record.setType(CheckinRecord.TYPE_QR);
         record.setSessionId(session.getId());
         record.setStudentId(studentId);
         record.setStatus(status);
@@ -134,8 +309,8 @@ public class CheckinServiceImpl implements CheckinService {
     @Override
     @Transactional
     public CheckinSession createSession(Long teacherId, Long courseId, String title,
-                                         double lat, double lon, int radiusMeters,
-                                         int durationMinutes, List<Long> classIds) {
+                                        double lat, double lon, int radiusMeters,
+                                        int durationMinutes, List<Long> classIds) {
         CheckinSession session = new CheckinSession();
         session.setCourseId(courseId);
         session.setCreatorId(teacherId);
@@ -181,6 +356,13 @@ public class CheckinServiceImpl implements CheckinService {
     @Transactional
     public CheckinRecord checkin(Long studentId, Long sessionId, double lat, double lon) {
         CheckinSession session = sessionMapper.selectById(sessionId);
+        if (session == null) throw new RuntimeException("签到会话不存在");
+
+        // 👇 加上这个判断，防止学生绕过签到码强行用定位签到
+        if (session.getCode() != null && !session.getCode().isEmpty()) {
+            throw new RuntimeException("该签到需要使用签到码，不能使用定位签到");
+        }
+
         BusinessException.check(session != null, ResultCode.NOT_FOUND);
         BusinessException.check(session.getStatus() == CheckinSession.STATUS_ACTIVE, ResultCode.CHECKIN_SESSION_ENDED);
 
@@ -213,6 +395,7 @@ public class CheckinServiceImpl implements CheckinService {
         }
 
         CheckinRecord record = new CheckinRecord();
+        record.setType(CheckinRecord.TYPE_QR);
         record.setSessionId(sessionId);
         record.setStudentId(studentId);
         record.setLatitude(BigDecimal.valueOf(lat));
@@ -251,6 +434,7 @@ public class CheckinServiceImpl implements CheckinService {
                 : CheckinRecord.STATUS_NORMAL;
 
         CheckinRecord record = new CheckinRecord();
+        record.setType(CheckinRecord.TYPE_QR);
         record.setSessionId(session.getId());
         record.setStudentId(studentId);
         record.setStatus(status);
@@ -279,6 +463,10 @@ public class CheckinServiceImpl implements CheckinService {
     @Override
     @Transactional
     public CheckinSupplement submitSupplement(Long studentId, Long sessionId, String reason) {
+        // 先查会话，用来知道推送给哪位老师
+        CheckinSession session = sessionMapper.selectById(sessionId);
+        BusinessException.check(session != null, ResultCode.NOT_FOUND, "签到会话不存在");
+
         CheckinSupplement s = new CheckinSupplement();
         s.setSessionId(sessionId);
         s.setStudentId(studentId);
@@ -286,6 +474,35 @@ public class CheckinServiceImpl implements CheckinService {
         s.setStatus(CheckinSupplement.STATUS_PENDING);
         s.setCreateTime(LocalDateTime.now());
         supplementMapper.insert(s);
+
+        // 推送给发起老师（对齐好友申请里的 badgeService.pushBadgeIfOnline 模式）
+        Long teacherId = session.getCreatorId();
+        if (teacherId != null) {
+            SysUser student = sysUserMapper.selectById(studentId);
+
+            Map<String, Object> evt = new HashMap<>();
+            evt.put("event", "supplement_request");
+            evt.put("supplementId", s.getId());
+            evt.put("sessionId", sessionId);
+            evt.put("sessionTitle", session.getTitle());
+            evt.put("courseId", session.getCourseId());
+            evt.put("studentId", studentId);
+            evt.put("studentName", student != null ? student.getName() : null);
+            evt.put("reason", reason);
+            evt.put("createTime", s.getCreateTime());
+
+            // WS 事件推送 —— 老师端监听 /queue/messages 里 event=supplement_request
+            if (onlineUserService.isOnline(teacherId)) {
+                onlineUserService.push(teacherId, "/queue/messages", evt);
+            }
+            // 红点：让老师端工作台角标刷新（和好友申请的红点走同一通道）
+            try {
+                badgeService.pushBadgeIfOnline(teacherId, null);
+            } catch (Exception ignore) {
+                // 即便 badge 推送失败也不影响主流程
+            }
+        }
+
         return s;
     }
 
@@ -294,7 +511,17 @@ public class CheckinServiceImpl implements CheckinService {
     public void approveSupplement(Long teacherId, Long supplementId, boolean approved, String note) {
         CheckinSupplement s = supplementMapper.selectById(supplementId);
         BusinessException.check(s != null, ResultCode.NOT_FOUND);
-        BusinessException.check(s.getStatus() == CheckinSupplement.STATUS_PENDING, ResultCode.BAD_REQUEST);
+        BusinessException.check(s.getStatus() == CheckinSupplement.STATUS_PENDING,
+                ResultCode.BAD_REQUEST, "该申请已被处理");
+
+        // 关键新增：校验当前老师是不是该签到会话的发起人，防止越权审批
+        CheckinSession session = sessionMapper.selectById(s.getSessionId());
+        BusinessException.check(session != null, ResultCode.NOT_FOUND, "签到会话不存在");
+        BusinessException.check(
+                teacherId != null && teacherId.equals(session.getCreatorId()),
+                ResultCode.FORBIDDEN,
+                "无权审批他人发起的签到补签"
+        );
 
         s.setApproverId(teacherId);
         s.setApproveTime(LocalDateTime.now());
@@ -305,23 +532,32 @@ public class CheckinServiceImpl implements CheckinService {
         // 审批通过则补一条签到记录
         if (approved) {
             CheckinRecord record = new CheckinRecord();
+            record.setType(CheckinRecord.TYPE_SUPPLEMENT);
             record.setSessionId(s.getSessionId());
             record.setStudentId(s.getStudentId());
             record.setStatus(CheckinRecord.STATUS_SUPPLEMENTED);
             record.setCheckinTime(LocalDateTime.now());
             try {
                 recordMapper.insert(record);
-            } catch (DuplicateKeyException ignore) {
+            } catch (org.springframework.dao.DuplicateKeyException ignore) {
                 // 已有签到记录，忽略
             }
         }
 
-        // 通知学生审批结果
+        // 通知学生审批结果（保持原有事件名不变，前端已经在监听）
         Map<String, Object> evt = new HashMap<>();
         evt.put("event", "supplement_result");
         evt.put("supplementId", supplementId);
         evt.put("approved", approved);
         evt.put("note", note);
-        onlineUserService.push(s.getStudentId(), "/queue/messages", evt);
+        if (onlineUserService.isOnline(s.getStudentId())) {
+            onlineUserService.push(s.getStudentId(), "/queue/messages", evt);
+        }
+        try {
+            badgeService.pushBadgeIfOnline(s.getStudentId(), null);
+        } catch (Exception ignore) {
+        }
     }
+
+
 }
