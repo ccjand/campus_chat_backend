@@ -21,7 +21,8 @@ public interface MessageService {
     Long prepareMessageId();
 
     //消息持久化
-    void persist(ChatMessageDTO dto);
+    boolean persist(ChatMessageDTO dto);
+
 
     /** 更新会话最后一条消息 */
     void updateLastMsg(Long roomId, Long msgId);

@@ -2,6 +2,7 @@ package com.ccj.campus.chat.controller;
 
 import com.ccj.campus.chat.common.R;
 import com.ccj.campus.chat.dto.FriendRequestVO;
+import com.ccj.campus.chat.dto.FriendVO;
 import com.ccj.campus.chat.entity.UserBlacklist;
 import com.ccj.campus.chat.entity.UserFriend;
 import com.ccj.campus.chat.security.LoginUser;
@@ -102,7 +103,7 @@ public class FriendController {
      * 好友列表
      */
     @GetMapping("/list")
-    public R<List<UserFriend>> list() {
+    public R<List<FriendVO>> list() {
         return R.ok(friendService.listFriends(LoginUser.currentUid()));
     }
 

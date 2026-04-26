@@ -35,7 +35,10 @@ public enum ResultCode {
     // 群组
     GROUP_NOT_OWNER(80001, "仅群主可执行该操作"),
     GROUP_NOT_ADMIN(80002, "仅群主或管理员可执行该操作"),
-    GROUP_NOT_MEMBER(80003, "你不是群成员");
+    GROUP_NOT_MEMBER(80003, "你不是群成员"),
+
+    //用户
+    USER_NOT_FOUND(90004, "用户不存在");
 
     private final int code;
     private final String msg;

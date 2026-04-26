@@ -1,7 +1,12 @@
 package com.ccj.campus.chat.service.impl;
 
 import cn.hutool.core.util.DesensitizedUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ccj.campus.chat.common.BusinessException;
 import com.ccj.campus.chat.common.ResultCode;
 import com.ccj.campus.chat.dto.UserLoginResp;
@@ -38,7 +43,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class UserServiceImpl implements UserService {
+public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> implements UserService {
 
     private static final String LOGIN_FAIL_KEY = "login:fail:";
     private static final String LOGIN_LOCK_KEY = "login:lock:";
@@ -60,25 +65,36 @@ public class UserServiceImpl implements UserService {
     public List<UserSearchVO> getApprovers() {
         Long currentUid = LoginUser.currentUid();
         SysUser currentUser = userMapper.selectById(currentUid);
-
-        List<SysUser> approvers = new ArrayList<>();
-
-        // ================= 开始：核心过滤逻辑 =================
-        if (currentUser.getRole() == SysUser.ROLE_STUDENT) {
-            // 1. 学生：只能向【本学院】的【辅导员】请假
-            approvers = userMapper.selectList(new QueryWrapper<SysUser>()
-                    .eq("role", SysUser.ROLE_ADMIN)
-                    .eq("department_id", currentUser.getDepartmentId())
-                    .like("name", "辅导")); // 用名字区分辅导员
-
-        } else if (currentUser.getRole() == SysUser.ROLE_TEACHER || currentUser.getRole() == SysUser.ROLE_ADMIN) {
-            // 2. 老师和辅导员：只能向【本学院】的【院长】请假
-            approvers = userMapper.selectList(new QueryWrapper<SysUser>()
-                    .eq("role", SysUser.ROLE_ADMIN)
-                    .eq("department_id", currentUser.getDepartmentId())
-                    .like("name", "院长")); // 用名字区分院长
+        if (currentUser == null) {
+            return new ArrayList<>();
         }
-        // ================= 结束：核心过滤逻辑 =================
+
+        Long departmentId = currentUser.getDepartmentId();
+        if (departmentId == null) {
+            return new ArrayList<>();
+        }
+
+        Integer currentRole = currentUser.getRole();
+        Integer targetRole = null;
+
+        // 学生 -> 选本学院辅导员
+        if (currentRole != null && currentRole == SysUser.ROLE_STUDENT) {
+            targetRole = SysUser.ROLE_COUNSELOR;
+        }
+        // 教师/辅导员 -> 选本学院院长
+        else if (currentRole != null &&
+                (currentRole == SysUser.ROLE_TEACHER || currentRole == SysUser.ROLE_COUNSELOR)) {
+            targetRole = SysUser.ROLE_STAFF;
+        }
+        // 其他角色不返回审批人
+        else {
+            return new ArrayList<>();
+        }
+
+        List<SysUser> approvers = userMapper.selectList(new QueryWrapper<SysUser>()
+                .eq("department_id", departmentId)
+                .eq("role", targetRole)
+                .eq("enabled", true));
 
         return approvers.stream().map(user -> {
             UserSearchVO vo = new UserSearchVO();
@@ -86,10 +102,47 @@ public class UserServiceImpl implements UserService {
             vo.setAccountNumber(user.getAccountNumber());
             vo.setName(user.getName());
             vo.setAvatar(user.getAvatar());
-            // 如果你的VO有departmentName也可以在这查出来设置上
             return vo;
         }).collect(Collectors.toList());
     }
+
+
+    @Override
+    public void updatePasswordByAccount(String accountNumber, String newPassword) {
+        // 1. 密码加密
+        String encodedPassword = passwordEncoder.encode(newPassword);
+
+        // 2. 更新数据库
+        LambdaUpdateWrapper<SysUser> updateWrapper = new LambdaUpdateWrapper<>();
+        updateWrapper.eq(SysUser::getAccountNumber, accountNumber)
+                .set(SysUser::getPasswordHash, encodedPassword);
+
+        this.update(updateWrapper);
+    }
+
+    @Override
+    public void updatePasswordById(Long userId, String newPassword) {
+        // 1. 密码加密
+        String encodedPassword = passwordEncoder.encode(newPassword);
+
+        // 2. 更新数据库
+        LambdaUpdateWrapper<SysUser> updateWrapper = new LambdaUpdateWrapper<>();
+        updateWrapper.eq(SysUser::getId, userId) // 如果你的主键不是 getId，请换成 getUid 之类的
+                .set(SysUser::getPasswordHash, encodedPassword);
+
+        this.update(updateWrapper);
+    }
+
+    @Override
+    public void updateUserInfo(SysUser user) {
+        this.updateById(user);
+    }
+
+    @Override
+    public SysUser getByAccountNumber(String accountNumber) {
+        return userMapper.selectByAccount(accountNumber);
+    }
+
 
     @Override
     public UserLoginResp login(String accountNumber, String password) {
@@ -103,13 +156,13 @@ public class UserServiceImpl implements UserService {
         // 2. 查用户
         SysUser user = userMapper.selectByAccount(accountNumber);
         if (user == null) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "账号不存在");
+            throw new BusinessException(ResultCode.BAD_REQUEST, "请输入正确的账号密码");
         }
 
         // 3. 密码校验
         if (!passwordEncoder.matches(password, user.getPasswordHash())) {
             handleLoginFail(accountNumber);
-            throw new BusinessException(ResultCode.BAD_REQUEST, "密码错误");
+            throw new BusinessException(ResultCode.BAD_REQUEST, "请输入正确的账号密码");
         }
 
         // 4. 登录成功，清除失败计数

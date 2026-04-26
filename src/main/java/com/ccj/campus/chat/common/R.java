@@ -36,6 +36,13 @@ public class R<T> implements Serializable {
         return r;
     }
 
+    public static <T> R<T> fail(String msg) {
+        R<T> r = new R<>();
+        r.setCode(200);
+        r.setMsg(msg);
+        return r;
+    }
+
     private static <T> R<T> build(ResultCode code, T data) {
         R<T> r = new R<>();
         r.setCode(code.getCode());

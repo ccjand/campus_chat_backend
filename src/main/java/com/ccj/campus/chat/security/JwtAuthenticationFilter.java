@@ -23,9 +23,9 @@ import java.util.List;
 
 /**
  * JWT 过滤器。对齐论文 4.4：
- *  - Bearer Token 解析
- *  - Redis 黑名单（登出后主动吊销）
- *  - 成功后注入 Authentication 供 @PreAuthorize 使用
+ * - Bearer Token 解析
+ * - Redis 黑名单（登出后主动吊销）
+ * - 成功后注入 Authentication 供 @PreAuthorize 使用
  */
 @Slf4j
 @Component
@@ -41,8 +41,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
-                                     HttpServletResponse response,
-                                     FilterChain chain) throws ServletException, IOException {
+                                    HttpServletResponse response,
+                                    FilterChain chain) throws ServletException, IOException {
         String token = extract(request);
         if (StringUtils.isBlank(token)) {
             chain.doFilter(request, response);
@@ -86,10 +86,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private String roleToAuthority(Integer role) {
         if (role == null) return "ROLE_ANONYMOUS";
         switch (role) {
-            case 1: return "ROLE_STUDENT";
-            case 2: return "ROLE_TEACHER";
-            case 3: return "ROLE_ADMIN";
-            default: return "ROLE_ANONYMOUS";
+            case 0:
+                return "ROLE_ADMIN";
+            case 1:
+                return "ROLE_STUDENT";
+            case 2:
+                return "ROLE_TEACHER";
+            case 3:
+                return "ROLE_COUNSELOR";
+            case 4:
+                return "ROLE_STAFF";
+            default:
+                return "ROLE_ANONYMOUS";
         }
     }
 }

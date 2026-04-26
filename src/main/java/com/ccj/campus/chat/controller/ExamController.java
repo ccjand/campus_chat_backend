@@ -1,5 +1,6 @@
 package com.ccj.campus.chat.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.ccj.campus.chat.common.R;
 import com.ccj.campus.chat.entity.Exam;
 import com.ccj.campus.chat.mapper.ExamMapper;
@@ -34,11 +35,24 @@ public class ExamController {
     /**
      * 管理员：录入考试
      */
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     @PostMapping("/create")
     public R<Exam> create(@RequestBody Exam exam) {
         exam.setCreateTime(LocalDateTime.now());
         examMapper.insert(exam);
         return R.ok(exam);
+    }
+
+    /**
+     * 管理员：查询考试列表（用于“考试列表”tag）
+     */
+    @GetMapping("/list")
+    public R<List<Exam>> list(@RequestParam(defaultValue = "50") int size) {
+        int safeSize = Math.max(1, Math.min(size, 200));
+        List<Exam> list = examMapper.selectList(
+                new QueryWrapper<Exam>()
+                        .orderByDesc("create_time")
+                        .last("LIMIT " + safeSize)
+        );
+        return R.ok(list);
     }
 }

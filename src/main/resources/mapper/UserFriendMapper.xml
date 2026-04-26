@@ -12,6 +12,23 @@
         <result column="create_time" property="createTime"/>
     </resultMap>
 
+    <insert id="upsertRelation">
+        INSERT INTO user_friend (user_id, friend_id, deleted, create_time)
+        VALUES (#{userId}, #{friendId}, FALSE, NOW())
+            ON CONFLICT (user_id, friend_id)
+    DO UPDATE SET deleted = FALSE,
+                       create_time = EXCLUDED.create_time
+    </insert>
+
+    <update id="reviveRelation">
+        UPDATE user_friend
+        SET deleted = FALSE,
+            create_time = NOW()
+        WHERE user_id = #{userId}
+          AND friend_id = #{friendId}
+          AND deleted = TRUE
+    </update>
+
     <!-- 好友列表（只查未删除的） -->
     <select id="listByUser" resultMap="BaseResultMap">
         SELECT *

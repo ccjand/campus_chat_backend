@@ -32,7 +32,8 @@ public class LeaveServiceImpl implements LeaveService {
     @Override
     @Transactional
     public LeaveApplication apply(Long applicantId, Long approverId, int type,
-                                  String reason, LocalDateTime startTime, LocalDateTime endTime) {
+                                  String reason, LocalDateTime startTime, LocalDateTime endTime,
+                                  List<Map<String, Object>> attachments) {
         LeaveApplication app = new LeaveApplication();
         app.setApplicantId(applicantId);
         app.setApproverId(approverId);
@@ -40,6 +41,7 @@ public class LeaveServiceImpl implements LeaveService {
         app.setReason(reason);
         app.setStartTime(startTime);
         app.setEndTime(endTime);
+        app.setAttachments(attachments);
         app.setStatus(LeaveApplication.STATUS_PENDING);
         app.setCreateTime(LocalDateTime.now());
         app.setUpdateTime(LocalDateTime.now());

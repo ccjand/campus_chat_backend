@@ -17,9 +17,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 /**
  * 对齐论文 3.4 + 4.4：
- *  - 过滤器链 + 方法级注解 (@PreAuthorize) 双重保障
- *  - JWT 无状态认证，不建 HTTP Session
- *  - 认证失败 401 / 越权 403，由专门的 handler 返回
+ * - 过滤器链 + 方法级注解 (@PreAuthorize) 双重保障
+ * - JWT 无状态认证，不建 HTTP Session
+ * - 认证失败 401 / 越权 403，由专门的 handler 返回
  */
 @Configuration
 @RequiredArgsConstructor
@@ -39,26 +39,27 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            .csrf().disable()
-            .cors().and()
-            .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS).and()
-            .authorizeRequests()
+                .csrf().disable()
+                .cors().and()
+                .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS).and()
+                .authorizeRequests()
                 // 登录、健康检查、WebSocket 握手端点放行（具体鉴权在 STOMP 拦截器内）
                 .antMatchers("/auth/login", "/auth/register",
-                             "/actuator/**",
-                             "/ws/**",
-                             "/error").permitAll()
+                        "/user/updatePassword",
+                        "/actuator/**",
+                        "/ws/**",
+                        "/error").permitAll()
                 // 管理员专属后台
                 .antMatchers("/admin/**").hasAuthority("ROLE_ADMIN")
                 // 教师专属
                 .antMatchers(HttpMethod.POST, "/checkin/teacher/**").hasAnyAuthority("ROLE_TEACHER", "ROLE_ADMIN")
                 .anyRequest().authenticated()
-            .and()
-            .exceptionHandling()
+                .and()
+                .exceptionHandling()
                 .authenticationEntryPoint(authEntryPoint)
                 .accessDeniedHandler(deniedHandler)
-            .and()
-            .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
+                .and()
+                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 }

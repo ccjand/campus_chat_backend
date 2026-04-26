@@ -5,6 +5,7 @@ import com.ccj.campus.chat.common.R;
 import com.ccj.campus.chat.entity.*;
 import com.ccj.campus.chat.mapper.*;
 import com.ccj.campus.chat.security.LoginUser;
+import com.ccj.campus.chat.websocket.OnlineUserService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -15,7 +16,7 @@ import javax.validation.Valid;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.*;
 
 /**
  * 管理员后台接口。对齐论文 3.4：
@@ -38,6 +39,8 @@ public class AdminController {
     private final SysUserClassRelMapper userClassRelMapper;
     private final CourseClassRelMapper courseClassRelMapper;
     private final PasswordEncoder passwordEncoder;
+    private final ExamMapper examMapper;
+    private final OnlineUserService onlineUserService;
 
     // ==================== 院系管理 ====================
 
@@ -156,6 +159,22 @@ public class AdminController {
     public R<Void> bindStudents(@PathVariable Long examId, @RequestBody List<ExamStudentRel> list) {
         if (list != null && !list.isEmpty()) {
             examStudentRelMapper.batchInsert(examId, list);
+
+            Exam exam = examMapper.selectById(examId);
+            Map<String, Object> evt = new HashMap<>();
+            evt.put("event", "exam");
+            evt.put("examId", examId);
+            evt.put("name", exam == null ? null : exam.getName());
+            evt.put("examTime", exam == null ? null : exam.getExamTime());
+            evt.put("location", exam == null ? null : exam.getLocation());
+
+            Set<Long> targets = new LinkedHashSet<>();
+            for (ExamStudentRel r : list) {
+                if (r != null && r.getStudentId() != null) targets.add(r.getStudentId());
+            }
+            for (Long uid : targets) {
+                onlineUserService.push(uid, "/queue/messages", evt);
+            }
         }
         return R.ok();
     }

@@ -19,20 +19,37 @@
         <result column="card_msg_id"   property="cardMsgId"/>
         <result column="create_time"   property="createTime"/>
         <result column="update_time"   property="updateTime"/>
+
+        <result column="applicant_name"            property="applicantName"/>
+        <result column="applicant_account_number"  property="applicantAccountNumber"/>
+        <result column="approver_name"             property="approverName"/>
+        <result column="approver_account_number"   property="approverAccountNumber"/>
     </resultMap>
 
-    <!-- 对齐论文 5.4：审批人查看待审批列表，利用部分索引 idx_leave_approver_pending -->
     <select id="listPendingByApprover" resultMap="BaseResultMap">
-        SELECT * FROM leave_application
-        WHERE approver_id = #{approverId}
-          AND status = 0
-        ORDER BY create_time DESC
+        SELECT l.*,
+               a.name           AS applicant_name,
+               a.account_number AS applicant_account_number,
+               p.name           AS approver_name,
+               p.account_number AS approver_account_number
+        FROM leave_application l
+                 LEFT JOIN sys_user a ON a.id = l.applicant_id
+                 LEFT JOIN sys_user p ON p.id = l.approver_id
+        WHERE l.approver_id = #{approverId}
+          AND l.status = 0
+        ORDER BY l.create_time DESC
     </select>
 
     <select id="listByApplicant" resultMap="BaseResultMap">
-        SELECT * FROM leave_application
-        WHERE applicant_id = #{applicantId}
-        ORDER BY create_time DESC
+        SELECT l.*,
+               a.name           AS applicant_name,
+               a.account_number AS applicant_account_number,
+               p.name           AS approver_name,
+               p.account_number AS approver_account_number
+        FROM leave_application l
+                 LEFT JOIN sys_user a ON a.id = l.applicant_id
+                 LEFT JOIN sys_user p ON p.id = l.approver_id
+        WHERE l.applicant_id = #{applicantId}
+        ORDER BY l.create_time DESC
     </select>
-
 </mapper>

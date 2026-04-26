@@ -56,10 +56,8 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     public Long prepareMessageId() {
-        Long id = redisTemplate.opsForValue().increment("msg:id:gen");
-        if (id == null) {
-            throw new BusinessException(ResultCode.INTERNAL_ERROR);
-        }
+        Long id = messageMapper.nextMessageId();
+        if (id == null) throw new BusinessException(ResultCode.INTERNAL_ERROR);
         return id;
     }
 
@@ -69,10 +67,12 @@ public class MessageServiceImpl implements MessageService {
         contactMapper.markRoomRead(roomId, readerId);
     }
 
+
     @Override
     @Transactional
-    public void persist(ChatMessageDTO dto) {
+    public boolean persist(ChatMessageDTO dto) {
         Message m = new Message();
+        m.setId(dto.getId());
         m.setRoomId(dto.getRoomId());
         m.setFromUid(dto.getFromUid());
         m.setType(dto.getType() == null ? Message.TYPE_TEXT : dto.getType());
@@ -81,12 +81,14 @@ public class MessageServiceImpl implements MessageService {
         m.setClientSeq(dto.getClientSeq());
         m.setStatus(Message.STATUS_NORMAL);
         m.setCreateTime(dto.getCreateTime() == null ? LocalDateTime.now() : dto.getCreateTime());
-        try {
-            messageMapper.insert(m);
-        } catch (DuplicateKeyException dup) {
-            // 对齐论文 4.2: 基于客户端序列号幂等，重复投递直接忽略
-            log.debug("duplicate message ignored: uid={}, seq={}", dto.getFromUid(), dto.getClientSeq());
+
+        int inserted = messageMapper.insertIgnoreDuplicate(m);
+        if (inserted == 0) {
+            log.debug("duplicate message ignored: uid={}, room={}, seq={}",
+                    dto.getFromUid(), dto.getRoomId(), dto.getClientSeq());
+            return false;
         }
+        return true;
     }
 
     @Override

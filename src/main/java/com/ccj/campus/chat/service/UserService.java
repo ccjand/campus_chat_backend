@@ -27,7 +27,16 @@ public interface UserService {
     /** 按关键词搜索用户（学号/姓名模糊匹配） */
     List<UserSearchVO> searchUsers(String keyword, Long currentUid);
 
+    void updatePasswordByAccount(String accountNumber, String newPassword);
+    void updatePasswordById(Long userId, String newPassword); // 新增根据 ID 修改
 
     /** 获取所有可选审批人（教师或辅导员） */
     List<UserSearchVO> getApprovers();
+
+
+
+    void updateUserInfo(SysUser user);
+
+    SysUser getByAccountNumber(String accountNumber);
+
 }

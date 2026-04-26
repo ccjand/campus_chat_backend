@@ -1,19 +1,20 @@
+// GroupService.java
 package com.ccj.campus.chat.service;
 
 import com.ccj.campus.chat.entity.ChatGroup;
 import com.ccj.campus.chat.entity.ChatGroupMember;
 
 import java.util.List;
+import java.util.Map;
 
 /**
- * 群组业务接口。对齐论文 3.2：
- *   - 班级群 + 兴趣群
- *   - 三级角色：群主 / 管理员 / 普通成员
- *   - 群主可转让管理权限、解散群组
+ * 群组业务接口
  */
 public interface GroupService {
 
-    ChatGroup create(Long ownerId, String name, int type, Long classId);
+    ChatGroup create(Long ownerId, String name, int type, Long classId, List<Long> memberIds);
+
+    Map<String, Object> getCreateCandidates(Long currentUid);
 
     void addMember(Long operatorId, Long groupId, Long userId);
 

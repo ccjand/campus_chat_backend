@@ -2,6 +2,7 @@ package com.ccj.campus.chat.security;
 
 import com.ccj.campus.chat.common.BusinessException;
 import com.ccj.campus.chat.common.ResultCode;
+import com.ccj.campus.chat.entity.SysUser;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.springframework.security.core.Authentication;
@@ -17,7 +18,11 @@ import java.io.Serializable;
 @AllArgsConstructor
 public class LoginUser implements Serializable {
     private Long uid;
-    private Integer role;      // 1=学生 2=教师 3=管理员
+
+    /**
+     * @see SysUser
+     */
+    private Integer role;
 
     /**
      * 取当前登录用户 id
@@ -47,6 +52,6 @@ public class LoginUser implements Serializable {
     }
 
     public boolean isAdmin() {
-        return role != null && role == 3;
+        return role != null && role == 0;
     }
 }

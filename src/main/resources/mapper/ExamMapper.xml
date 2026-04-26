@@ -5,7 +5,7 @@
 
     <resultMap id="BaseResultMap" type="com.ccj.campus.chat.entity.Exam">
         <id column="id" property="id"/>
-        <result column="course_id" property="courseId"/>
+        <result column="class_id" property="classId"/>
         <result column="name" property="name"/>
         <result column="exam_time" property="examTime"/>
         <result column="duration_minutes" property="durationMinutes"/>
@@ -17,8 +17,8 @@
     <select id="listByStudent" resultMap="BaseResultMap">
         SELECT e.*
         FROM exam e
-                 JOIN exam_student_rel esr ON esr.exam_id = e.id
-        WHERE esr.student_id = #{studentId}
+                 JOIN sys_user_class_rel ucr ON ucr.class_id = e.class_id
+        WHERE ucr.user_id = #{studentId}
         ORDER BY e.exam_time ASC
     </select>
 

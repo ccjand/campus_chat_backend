@@ -14,7 +14,7 @@ public class Exam implements Serializable {
 
     @TableId(type = IdType.AUTO)
     private Long id;
-    private Long courseId;
+    private Long classId;
     private String name;
     private LocalDateTime examTime;
     private Integer durationMinutes;

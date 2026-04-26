@@ -43,6 +43,7 @@ public class CorsConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         // 对所有路径生效
         source.registerCorsConfiguration("/**", config);
+        
         return source;
     }
 }

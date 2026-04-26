@@ -6,11 +6,9 @@ import com.ccj.campus.chat.common.BusinessException;
 import com.ccj.campus.chat.common.ResultCode;
 import com.ccj.campus.chat.dto.ChatMessageDTO;
 import com.ccj.campus.chat.dto.FriendRequestVO;
+import com.ccj.campus.chat.dto.FriendVO;
 import com.ccj.campus.chat.entity.*;
-import com.ccj.campus.chat.mapper.FriendRequestMapper;
-import com.ccj.campus.chat.mapper.SysUserMapper;
-import com.ccj.campus.chat.mapper.UserBlacklistMapper;
-import com.ccj.campus.chat.mapper.UserFriendMapper;
+import com.ccj.campus.chat.mapper.*;
 import com.ccj.campus.chat.mq.MQTopic;
 import com.ccj.campus.chat.service.*;
 import com.ccj.campus.chat.websocket.OnlineUserService;
@@ -40,8 +38,49 @@ public class FriendServiceImpl implements FriendService {
     private final OutboxService outboxService;
     private final OnlineUserService onlineUserService;
     private final BadgeService badgeService;
+    private final SysDepartmentMapper sysDepartmentMapper;
 
-    // ==================== 好友申请 ====================
+
+    @Override
+    public List<FriendVO> listFriends(Long userId) {
+        // 这里的 listByUser sql 里已经有 AND deleted = FALSE
+        // 所以被你删除的好友天然就不会查出来，更不会展示！
+        List<UserFriend> friends = friendMapper.listByUser(userId);
+
+        return friends.stream().map(f -> {
+            Long friendId = f.getFriendId();
+            // 关联获取用户最新信息
+            SysUser u = userMapper.selectById(friendId);
+
+            // 获取部门名称
+            String departmentName = "";
+            if (u != null && u.getDepartmentId() != null) {
+                SysDepartment dept = sysDepartmentMapper.selectById(u.getDepartmentId());
+                if (dept != null) {
+                    departmentName = dept.getName();
+                }
+            }
+
+            // 【核心】调用现成的方法，判断该好友是否被当前用户拉黑
+            boolean blocked = isBlocked(userId, friendId);
+
+            // 获取或创建房间ID，保证前端能拿到 roomId 进行聊天跳转
+            ChatRoom room = contactService.getOrCreateSingleRoom(userId, friendId);
+
+            return FriendVO.builder()
+                    .uid(friendId)
+                    .roomId(room.getId())
+                    .fullName(u != null ? u.getName() : "未知用户")
+                    .accountNumber(u != null ? u.getAccountNumber() : "")
+                    .avatar(u != null ? u.getAvatar() : "")
+                    .role(u != null && u.getRole() != null ? u.getRole() : 1)
+                    .remark(f.getRemark())
+                    .department(departmentName)
+                    .isBlocked(blocked) // 塞入拉黑状态给前端
+                    .build();
+        }).collect(Collectors.toList());
+    }
+
 
     @Override
     public void sendRequest(Long fromId, Long toId, String reason) {
@@ -112,14 +151,19 @@ public class FriendServiceImpl implements FriendService {
         greet.setRoomId(room.getId());
         greet.setType(1); // 文本
         greet.setContent("我们成为好友啦，开始聊天吧！");
-        greet.setClientSeq("friend-greet-" + req.getFromId() + "-" + req.getToId());
+        greet.setClientSeq("friend-greet-" + req.getId() + "-" + req.getFromId() + "-" + req.getToId());
         greet.setCreateTime(LocalDateTime.now());
 
         Long msgId = messageService.prepareMessageId();
         greet.setId(msgId);
 
-        //同步持久化消息
-        messageService.persist(greet);
+        // 同步持久化消息（命中幂等键时 inserted=false）
+        boolean inserted = messageService.persist(greet);
+
+        // 没插入成功（DO NOTHING）就不更新会话、不重复推送
+        if (!inserted) {
+            return;
+        }
 
         // 更新会话最新消息
         messageService.updateLastMsg(room.getId(), msgId);
@@ -209,27 +253,7 @@ public class FriendServiceImpl implements FriendService {
     }
 
     private void insertFriend(Long userId, Long friendId) {
-        UserFriend existing = friendMapper.selectOne(
-                new QueryWrapper<UserFriend>()
-                        .eq("user_id", userId)
-                        .eq("friend_id", friendId));
-        if (existing != null) {
-            if (existing.getDeleted()) {
-                existing.setDeleted(false);
-                existing.setCreateTime(LocalDateTime.now());
-                friendMapper.updateById(existing);
-            }
-            return;
-        }
-        UserFriend f = new UserFriend();
-        f.setUserId(userId);
-        f.setFriendId(friendId);
-        f.setDeleted(false);
-        f.setCreateTime(LocalDateTime.now());
-        try {
-            friendMapper.insert(f);
-        } catch (DuplicateKeyException ignore) {
-        }
+        friendMapper.upsertRelation(userId, friendId);
     }
 
     @Override
@@ -242,11 +266,6 @@ public class FriendServiceImpl implements FriendService {
         UpdateWrapper<UserFriend> w2 = new UpdateWrapper<>();
         w2.eq("user_id", friendId).eq("friend_id", userId).set("deleted", true);
         friendMapper.update(null, w2);
-    }
-
-    @Override
-    public List<UserFriend> listFriends(Long userId) {
-        return friendMapper.listByUser(userId);
     }
 
     @Override
@@ -268,7 +287,6 @@ public class FriendServiceImpl implements FriendService {
             blacklistMapper.insert(b);
         } catch (DuplicateKeyException ignore) {
         }
-        removeFriend(userId, targetId);
     }
 
     @Override
@@ -289,22 +307,4 @@ public class FriendServiceImpl implements FriendService {
         return blacklistMapper.selectByUserAndTarget(userId, targetId) != null;
     }
 
-    // ==================== 内部方法 ====================
-
-    private void pushOrOffline(Long uid, ChatMessageDTO originMsg) {
-        if (onlineUserService.isOnline(uid)) {
-            onlineUserService.push(uid, "/queue/messages", originMsg);
-        } else {
-            ChatMessageDTO offlineMsg = new ChatMessageDTO();
-            offlineMsg.setId(originMsg.getId());
-            offlineMsg.setFromUid(originMsg.getFromUid());
-            offlineMsg.setReceiverId(uid);
-            offlineMsg.setRoomId(originMsg.getRoomId());
-            offlineMsg.setType(originMsg.getType());
-            offlineMsg.setContent(originMsg.getContent());
-            offlineMsg.setClientSeq(originMsg.getClientSeq() + "_" + uid);
-            offlineMsg.setCreateTime(originMsg.getCreateTime());
-            outboxService.enqueue(MQTopic.OFFLINE_MSG_TOPIC, "offline", offlineMsg);
-        }
-    }
 }

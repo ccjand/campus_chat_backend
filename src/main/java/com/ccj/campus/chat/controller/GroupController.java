@@ -13,6 +13,7 @@ import javax.validation.Valid;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 群组接口。对齐论文 3.2 + 4.3 群组组。
@@ -21,13 +22,22 @@ import java.util.List;
 @RequestMapping("/group")
 @RequiredArgsConstructor
 public class GroupController {
-
     private final GroupService groupService;
+
+    @GetMapping("/create/candidates")
+    public R<Map<String, Object>> createCandidates() {
+        return R.ok(groupService.getCreateCandidates(LoginUser.currentUid()));
+    }
 
     @PostMapping("/create")
     public R<ChatGroup> create(@RequestBody @Valid CreateGroupReq req) {
-        return R.ok(groupService.create(LoginUser.currentUid(),
-                req.getName(), req.getType(), req.getClassId()));
+        return R.ok(groupService.create(
+                LoginUser.currentUid(),
+                req.getName(),
+                req.getType(),
+                req.getClassId(),
+                req.getMemberIds()
+        ));
     }
 
     @PostMapping("/{groupId}/member/add")
@@ -71,8 +81,31 @@ public class GroupController {
         return R.ok(groupService.listMembers(groupId));
     }
 
-    @Data static class CreateGroupReq { @NotBlank private String name; @NotNull private Integer type; private Long classId; }
-    @Data static class UserIdReq      { @NotNull private Long userId; }
-    @Data static class AdminReq       { @NotNull private Long userId; private boolean admin; }
-    @Data static class AnnouncementReq{ private String announcement; }
+    @Data
+    static class CreateGroupReq {
+        @NotBlank
+        private String name;
+        @NotNull
+        private Integer type;
+        private Long classId;
+        private List<Long> memberIds;
+    }
+
+    @Data
+    static class UserIdReq {
+        @NotNull
+        private Long userId;
+    }
+
+    @Data
+    static class AdminReq {
+        @NotNull
+        private Long userId;
+        private boolean admin;
+    }
+
+    @Data
+    static class AnnouncementReq {
+        private String announcement;
+    }
 }

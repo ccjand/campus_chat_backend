@@ -14,6 +14,7 @@ import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 请假接口。对齐论文 5.4：
@@ -30,8 +31,15 @@ public class LeaveController {
     @PreAuthorize("hasAnyAuthority('ROLE_STUDENT','ROLE_TEACHER')")
     @PostMapping("/apply")
     public R<LeaveApplication> apply(@RequestBody @Valid LeaveApplyReq req) {
-        return R.ok(leaveService.apply(LoginUser.currentUid(), req.getApproverId(),
-                req.getType(), req.getReason(), req.getStartTime(), req.getEndTime()));
+        return R.ok(leaveService.apply(
+                LoginUser.currentUid(),
+                req.getApproverId(),
+                req.getType(),
+                req.getReason(),
+                req.getStartTime(),
+                req.getEndTime(),
+                req.getAttachments()
+        ));
     }
 
     /**
@@ -91,6 +99,8 @@ public class LeaveController {
         private LocalDateTime startTime;
         @NotNull
         private LocalDateTime endTime;
+
+        private List<Map<String, Object>> attachments;
     }
 
     @Data

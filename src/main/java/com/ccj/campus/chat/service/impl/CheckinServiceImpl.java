@@ -304,20 +304,22 @@ public class CheckinServiceImpl implements CheckinService {
         return new ArrayList<>(grouped.values());
     }
 
-    // ==================== 教师端 ====================
 
     @Override
     @Transactional
     public CheckinSession createSession(Long teacherId, Long courseId, String title,
-                                        double lat, double lon, int radiusMeters,
+                                        Double lat, Double lon, Integer radiusMeters,
                                         int durationMinutes, List<Long> classIds) {
         CheckinSession session = new CheckinSession();
         session.setCourseId(courseId);
         session.setCreatorId(teacherId);
         session.setTitle(title);
-        session.setCenterLatitude(BigDecimal.valueOf(lat));
-        session.setCenterLongitude(BigDecimal.valueOf(lon));
+
+        // 👇 处理为 null 的情况
+        session.setCenterLatitude(lat != null ? BigDecimal.valueOf(lat) : null);
+        session.setCenterLongitude(lon != null ? BigDecimal.valueOf(lon) : null);
         session.setRadiusMeters(radiusMeters);
+
         session.setDurationMinutes(durationMinutes);
         session.setStartTime(LocalDateTime.now());
         session.setStatus(CheckinSession.STATUS_ACTIVE);
@@ -358,7 +360,11 @@ public class CheckinServiceImpl implements CheckinService {
         CheckinSession session = sessionMapper.selectById(sessionId);
         if (session == null) throw new RuntimeException("签到会话不存在");
 
-        // 👇 加上这个判断，防止学生绕过签到码强行用定位签到
+        // 👇 新增拦截：如果该签到没有记录定位，说明不支持定位签到
+        if (session.getCenterLatitude() == null) {
+            throw new RuntimeException("该签到不支持定位签到，请使用对应的扫码或签到码");
+        }
+
         if (session.getCode() != null && !session.getCode().isEmpty()) {
             throw new RuntimeException("该签到需要使用签到码，不能使用定位签到");
         }
@@ -381,9 +387,7 @@ public class CheckinServiceImpl implements CheckinService {
         // 确定签到状态
         int status;
         if (!inFence) {
-            status = CheckinRecord.STATUS_OUT_RANGE;
-            throw new BusinessException(ResultCode.CHECKIN_NOT_IN_RANGE,
-                    "距离签到点 " + distance + " 米，超出围栏 " + session.getRadiusMeters() + " 米");
+            throw new BusinessException(ResultCode.CHECKIN_NOT_IN_RANGE, "不在签到范围内");
         }
 
         // 对齐论文 5.3："已过签到开始时间 10 分钟以上的标记为迟到"

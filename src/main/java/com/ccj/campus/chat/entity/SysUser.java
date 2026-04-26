@@ -14,10 +14,12 @@ import java.time.LocalDateTime;
 @Data
 @TableName("sys_user")
 public class SysUser implements Serializable {
+    public static final int ROLE_ADMIN = 0; //管理员
+    public static final int ROLE_STUDENT = 1; //学生
+    public static final int ROLE_TEACHER = 2; //教师
+    public static final int ROLE_COUNSELOR = 3; //辅导员
+    public static final int ROLE_STAFF = 4; //院长
 
-    public static final int ROLE_STUDENT = 1;
-    public static final int ROLE_TEACHER = 2;
-    public static final int ROLE_ADMIN   = 3;
 
     @TableId(type = IdType.AUTO)
     private Long id;

@@ -156,12 +156,16 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     private String authOf(Integer role) {
         if (role == null) return "ROLE_ANONYMOUS";
         switch (role) {
+            case 0:
+                return "ROLE_ADMIN";
             case 1:
                 return "ROLE_STUDENT";
             case 2:
                 return "ROLE_TEACHER";
             case 3:
-                return "ROLE_ADMIN";
+                return "ROLE_COUNSELOR";
+            case 4:
+                return "ROLE_STAFF";
             default:
                 return "ROLE_ANONYMOUS";
         }

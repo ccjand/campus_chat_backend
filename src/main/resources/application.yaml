@@ -1,14 +1,16 @@
 server:
+    address: 0.0.0.0
     port: 8080
     servlet:
         context-path: /capi
+
 
 spring:
     application:
         name: campus-chat
     datasource:
         driver-class-name: org.postgresql.Driver
-        url: jdbc:postgresql://115.190.249.67:15432/campus_chat?stringtype=unspecified
+        url: jdbc:postgresql://localhost:15432/campus_chat?stringtype=unspecified
         username: root
         password: 32e1615de259f13b3ad7
         hikari:
@@ -16,7 +18,8 @@ spring:
             minimum-idle: 10
     redis:
         host: localhost
-        port: 6379
+        port: 17379
+        password: 20020104CCjj+1
         database: 0
         timeout: 5000ms
         lettuce:
@@ -35,7 +38,7 @@ spring:
 
 # RocketMQ
 rocketmq:
-    name-server: 115.190.249.67:9876
+    name-server: localhost:9876
     producer:
         group: campus_chat_producer
         send-message-timeout: 10000
@@ -60,22 +63,19 @@ jwt:
 
 # MinIO
 minio:
-    endpoint: http://115.190.249.67:19000
+    endpoint: http://localhost:19000
     access-key: ccjj
     secret-key: 3177587750CCjj+1
     bucket: campus-chat
 
-# ????
 campus:
     checkin:
-        # ?? 5.3: ???? 30~100m ??????? 10 ???????
         max-radius-meters: 500
         late-minutes: 10
         qr-secret: "cvfdjnvcdf_csdbcdce3efdsjn1w1hsh"
         qr-ttl-seconds: 60          # 二维码有效期（秒），前端每 10 秒刷新一次
         qr-size: 280                # 二维码 PNG 像素尺寸
     message:
-        # ?? 3.2: 2 ??????
         recall-window-seconds: 120
     security:
         login-fail-lock-threshold: 5

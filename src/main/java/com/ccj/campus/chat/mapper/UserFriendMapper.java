@@ -13,4 +13,8 @@ public interface UserFriendMapper extends BaseMapper<UserFriend> {
 
     /** 查询两人之间的好友关系（双向任一方向即可） */
     UserFriend selectRelation(@Param("userId") Long userId, @Param("friendId") Long friendId);
+
+    int reviveRelation(@Param("userId") Long userId, @Param("friendId") Long friendId);
+
+    int upsertRelation(@Param("userId") Long userId, @Param("friendId") Long friendId);
 }

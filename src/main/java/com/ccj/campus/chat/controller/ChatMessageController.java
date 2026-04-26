@@ -3,11 +3,14 @@ package com.ccj.campus.chat.controller;
 import com.ccj.campus.chat.dto.ChatMessageDTO;
 import com.ccj.campus.chat.entity.ChatRoom;
 import com.ccj.campus.chat.entity.ChatGroupMember;
+import com.ccj.campus.chat.entity.SysUser;
 import com.ccj.campus.chat.mapper.ChatRoomMapper;
 import com.ccj.campus.chat.mapper.ChatGroupMemberMapper;
 import com.ccj.campus.chat.mapper.ChatGroupMapper;
+import com.ccj.campus.chat.mapper.SysUserMapper;
 import com.ccj.campus.chat.mq.MQTopic;
 import com.ccj.campus.chat.service.ContactService;
+import com.ccj.campus.chat.service.FriendService;
 import com.ccj.campus.chat.service.MessageService;
 import com.ccj.campus.chat.service.OutboxService;
 import com.ccj.campus.chat.websocket.OnlineUserService;
@@ -23,7 +26,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.Principal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Controller
@@ -35,65 +40,116 @@ public class ChatMessageController {
     private final MessageService messageService;
     private final ContactService contactService;
     private final StringRedisTemplate stringRedisTemplate;
+    private final FriendService friendService;
+    private final SysUserMapper sysUserMapper;
+    private final OutboxService outboxService;
+
 
     @MessageMapping("/chat/send")
     public void handleSend(ChatMessageDTO msg, Principal principal) {
+        if (msg == null) {
+            log.warn("WS 消息体为空，丢弃");
+            return;
+        }
         if (principal == null) {
             log.warn("WS 消息无 Principal，丢弃 roomId={}", msg.getRoomId());
             return;
         }
+
         Long fromUid = Long.valueOf(principal.getName());
         msg.setFromUid(fromUid);
+
+        // 统一补齐 extInfo.senderName / senderAvatar
+        enrichSenderProfile(msg, fromUid);
+
         if (msg.getCreateTime() == null) msg.setCreateTime(LocalDateTime.now());
         if (msg.getId() == null) msg.setId(messageService.prepareMessageId());
 
         ChatRoom room = chatRoomMapper.selectById(msg.getRoomId());
         if (room == null) {
             log.warn("roomId={} 不存在", msg.getRoomId());
-            sendError(fromUid, "房间不存在");
+            sendError(fromUid, "ROOM_NOT_FOUND", "房间不存在", msg.getClientSeq(), msg.getRoomId());
             return;
         }
 
-        // ========== 1. 实时推送 ==========
         if (room.getType() == ChatRoom.TYPE_SINGLE) {
-            // 单聊：推给对方
             Long receiverId = msg.getReceiverId();
             if (receiverId == null) receiverId = resolveSingleChatPeer(room, fromUid);
-            if (receiverId != null) {
-                boolean online = Boolean.TRUE.equals(stringRedisTemplate.hasKey("ws:uid:" + receiverId));
-                if (online) {
-                    messagingTemplate.convertAndSendToUser(
-                            receiverId.toString(), "/queue/messages", msg);
-                    log.info("单聊推送 ✅ from={} to={} msgId={}", fromUid, receiverId, msg.getId());
-                } else {
-                    log.info("单聊接收方离线 from={} to={} msgId={}", fromUid, receiverId, msg.getId());
-                    // 如果你有 RocketMQ 离线队列，在这里发：
-                    // rocketMQTemplate.syncSend("offline-msg-topic", msg);
+            if (receiverId == null) {
+                sendError(fromUid, "RECEIVER_NOT_FOUND", "接收方不存在", msg.getClientSeq(), msg.getRoomId());
+                return;
+            }
+
+            // 关键：回写 receiverId，离线入队依赖这个字段
+            msg.setReceiverId(receiverId);
+
+            // 非好友或任一方拉黑，禁止发送
+            boolean isFriend = friendService.isFriend(fromUid, receiverId);
+            boolean blockedEitherSide =
+                    friendService.isBlocked(fromUid, receiverId) || friendService.isBlocked(receiverId, fromUid);
+
+            if (!isFriend || blockedEitherSide) {
+                sendError(fromUid, "NON_FRIEND_RELATION", "非好友关系，无法发送消息", msg.getClientSeq(), msg.getRoomId());
+                return;
+            }
+
+            boolean online = Boolean.TRUE.equals(stringRedisTemplate.hasKey("ws:uid:" + receiverId));
+            if (online) {
+                messagingTemplate.convertAndSendToUser(receiverId.toString(), "/queue/messages", msg);
+                log.info("单聊推送 ✅ from={} to={} msgId={}", fromUid, receiverId, msg.getId());
+            } else {
+                // 关键：接收方离线时入离线队列
+                try {
+                    outboxService.enqueue(MQTopic.OFFLINE_MSG_TOPIC, "offline", msg);
+                    log.info("单聊离线入队 ✅ from={} to={} msgId={}", fromUid, receiverId, msg.getId());
+                } catch (Exception e) {
+                    log.error("单聊离线入队失败 from={} to={} msgId={}", fromUid, receiverId, msg.getId(), e);
                 }
             }
-            // 回推给发送方自己（用于多端同步 & 把 pending 状态清掉）
-            messagingTemplate.convertAndSendToUser(
-                    fromUid.toString(), "/queue/messages", msg);
+
+            // 发送方回显
+            messagingTemplate.convertAndSendToUser(fromUid.toString(), "/queue/messages", msg);
 
         } else {
-            // 群聊：广播到房间 topic，所有订阅该 topic 的成员都会收到
+            // 群聊广播
             messagingTemplate.convertAndSend("/topic/room/" + msg.getRoomId(), msg);
             log.info("群聊广播 ✅ room={} from={} msgId={}", msg.getRoomId(), fromUid, msg.getId());
         }
 
-        // ========== 2. 异步持久化 ==========
+        boolean inserted = false;
         try {
-            messageService.persist(msg);
+            inserted = messageService.persist(msg);
         } catch (Exception e) {
             log.error("持久化消息失败 msgId={}", msg.getId(), e);
         }
 
-        // ========== 3. 更新会话最后一条消息 ==========
-        try {
-            messageService.updateLastMsg(msg.getRoomId(), msg.getId());
-        } catch (Exception e) {
-            log.warn("更新会话最后消息失败", e);
+        if (inserted) {
+            try {
+                messageService.updateLastMsg(msg.getRoomId(), msg.getId());
+            } catch (Exception e) {
+                log.warn("更新会话最后消息失败", e);
+            }
         }
+    }
+
+    private void enrichSenderProfile(ChatMessageDTO msg, Long fromUid) {
+        Map<String, Object> ext = msg.getExtInfo();
+        if (ext == null) ext = new HashMap<>();
+
+        SysUser from = sysUserMapper.selectById(fromUid);
+        if (from != null) {
+            Object sn = ext.get("senderName");
+            if (sn == null || String.valueOf(sn).trim().isEmpty()) {
+                ext.put("senderName", from.getName());
+            }
+
+            Object sa = ext.get("senderAvatar");
+            if (sa == null || String.valueOf(sa).trim().isEmpty()) {
+                ext.put("senderAvatar", from.getAvatar());
+            }
+        }
+
+        msg.setExtInfo(ext);
     }
 
     @MessageMapping("/chat/recall")
@@ -105,7 +161,7 @@ public class ChatMessageController {
             // 如果需要通知房间所有成员，可以再广播一个事件到 /topic/room/{roomId}
         } catch (Exception e) {
             log.warn("撤回失败 msgId={} uid={}", msgId, uid, e);
-            sendError(uid, "撤回失败：" + e.getMessage());
+            sendError(uid, "500", "撤回失败", null, null);
         }
     }
 
@@ -119,12 +175,16 @@ public class ChatMessageController {
         return u1 == selfUid ? u2 : u1;
     }
 
-    private void sendError(Long uid, String errMsg) {
+    private void sendError(Long uid, String code, String errMsg, String clientSeq, Long roomId) {
         try {
             java.util.Map<String, Object> err = new java.util.HashMap<>();
             err.put("type", -1);
+            err.put("code", code);
             err.put("data", errMsg);
+            err.put("clientSeq", clientSeq);
+            err.put("roomId", roomId);
             messagingTemplate.convertAndSendToUser(uid.toString(), "/queue/messages", err);
-        } catch (Exception ignore) {}
+        } catch (Exception ignore) {
+        }
     }
 }

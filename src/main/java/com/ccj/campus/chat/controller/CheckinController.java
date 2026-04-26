@@ -211,11 +211,8 @@ public class CheckinController {
         @NotNull
         private Long courseId;
         private String title;
-        @NotNull
         private Double centerLatitude;
-        @NotNull
         private Double centerLongitude;
-        @NotNull
         private Integer radiusMeters;
         @NotNull
         private Integer durationMinutes;

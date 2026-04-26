@@ -14,6 +14,10 @@ import java.util.List;
  */
 public interface MessageMapper extends BaseMapper<Message> {
 
+    int insertIgnoreDuplicate(Message message);
+
+    Long nextMessageId();
+
     /**
      * 分页拉取历史消息（按时间倒序，只取可见）
      */

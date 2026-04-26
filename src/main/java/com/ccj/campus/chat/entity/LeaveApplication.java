@@ -14,21 +14,21 @@ import java.util.Map;
 
 /**
  * 请假申请。对齐论文 5.4 状态机：
- *   0=待审批  1=已通过  2=已驳回  3=已撤销
+ * 0=待审批  1=已通过  2=已驳回  3=已撤销
  * 每次状态变更均记录操作时间和操作人。
  */
 @Data
 @TableName(value = "leave_application", autoResultMap = true)
 public class LeaveApplication implements Serializable {
 
-    public static final int STATUS_PENDING  = 0;
+    public static final int STATUS_PENDING = 0;
     public static final int STATUS_APPROVED = 1;
     public static final int STATUS_REJECTED = 2;
-    public static final int STATUS_REVOKED  = 3;
+    public static final int STATUS_REVOKED = 3;
 
-    public static final int TYPE_SICK   = 1;
-    public static final int TYPE_EVENT  = 2;
-    public static final int TYPE_OTHER  = 3;
+    public static final int TYPE_SICK = 1;
+    public static final int TYPE_EVENT = 2;
+    public static final int TYPE_OTHER = 3;
 
     @TableId(type = IdType.AUTO)
     private Long id;
@@ -49,4 +49,16 @@ public class LeaveApplication implements Serializable {
     private Long cardMsgId;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
+
+    @TableField(exist = false)
+    private String applicantName;
+
+    @TableField(exist = false)
+    private String applicantAccountNumber;
+
+    @TableField(exist = false)
+    private String approverName;
+
+    @TableField(exist = false)
+    private String approverAccountNumber;
 }

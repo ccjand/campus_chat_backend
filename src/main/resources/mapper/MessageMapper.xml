@@ -75,4 +75,16 @@
         LIMIT #{size}
     </select>
 
+    <select id="nextMessageId" resultType="java.lang.Long">
+        SELECT nextval('chat_message_id_seq')
+    </select>
+
+    <insert id="insertIgnoreDuplicate" parameterType="com.ccj.campus.chat.entity.Message">
+        INSERT INTO chat_message
+        (id, room_id, from_uid, type, content, ext_info, client_seq, status, create_time)
+        VALUES (#{id}, #{roomId}, #{fromUid}, #{type}, #{content},
+                #{extInfo, typeHandler=com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler},
+                #{clientSeq}, #{status}, #{createTime}) ON CONFLICT (from_uid, room_id, client_seq) DO NOTHING
+    </insert>
+
 </mapper>
