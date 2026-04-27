@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Controller
@@ -116,20 +117,15 @@ public class ChatMessageController {
             log.info("群聊广播 ✅ room={} from={} msgId={}", msg.getRoomId(), fromUid, msg.getId());
         }
 
-        boolean inserted = false;
-        try {
-            inserted = messageService.persist(msg);
-        } catch (Exception e) {
-            log.error("持久化消息失败 msgId={}", msg.getId(), e);
-        }
-
-        if (inserted) {
+        // 持久化改为异步（用 @Async 或单独线程），不阻塞广播
+        CompletableFuture.runAsync(() -> {
             try {
+                messageService.persist(msg);
                 messageService.updateLastMsg(msg.getRoomId(), msg.getId());
             } catch (Exception e) {
-                log.warn("更新会话最后消息失败", e);
+                log.error("持久化消息失败 msgId={}", msg.getId(), e);
             }
-        }
+        });
     }
 
     private void enrichSenderProfile(ChatMessageDTO msg, Long fromUid) {

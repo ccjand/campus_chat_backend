@@ -1,11 +1,18 @@
 server:
+    tomcat:
+        threads:
+            max: 500          # 默认200，提高到500
+            min-spare: 50     # 最小空闲线程
+        max-connections: 10000  # 最大连接数
+        accept-count: 500   # 连接队列大小
     address: 0.0.0.0
     port: 8080
     servlet:
         context-path: /capi
 
-
 spring:
+    websocket:
+        max-sessions: 1000  # 允许的最大WebSocket会话数
     application:
         name: campus-chat
     datasource:
