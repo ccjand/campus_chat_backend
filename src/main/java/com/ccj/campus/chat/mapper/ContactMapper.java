@@ -17,4 +17,6 @@ public interface ContactMapper extends BaseMapper<Contact> {
     /** 会话列表（带未读数、最后一条消息内容） */
     List<Map<String, Object>> listWithUnread(@Param("userId") Long userId);
 
+    void updateLastMsg(@Param("roomId") Long roomId, @Param("msgId") Long msgId);
+
 }

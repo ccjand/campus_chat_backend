@@ -101,11 +101,7 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     public void updateLastMsg(Long roomId, Long msgId) {
-        UpdateWrapper<Contact> w = new UpdateWrapper<>();
-        w.eq("room_id", roomId)
-                .set("last_msg_id", msgId)
-                .set("active_time", LocalDateTime.now());
-        contactMapper.update(null, w);
+        contactMapper.updateLastMsg(roomId, msgId);
     }
 
     @Override

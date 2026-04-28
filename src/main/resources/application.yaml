@@ -1,10 +1,12 @@
 server:
     tomcat:
         threads:
-            max: 500          # 默认200，提高到500
-            min-spare: 50     # 最小空闲线程
-        max-connections: 10000  # 最大连接数
-        accept-count: 500   # 连接队列大小
+            max: 500
+            min-spare: 50
+        max-connections: 10000
+        accept-count: 500
+        # 【新增】连接超时，避免慢连接占用线程
+        connection-timeout: 5000
     address: 0.0.0.0
     port: 8080
     servlet:
@@ -12,7 +14,7 @@ server:
 
 spring:
     websocket:
-        max-sessions: 1000  # 允许的最大WebSocket会话数
+        max-sessions: 2000        # 【优化】1000 → 2000，匹配压测并发量
     application:
         name: campus-chat
     datasource:
@@ -21,19 +23,23 @@ spring:
         username: root
         password: 32e1615de259f13b3ad7
         hikari:
-            maximum-pool-size: 50
-            minimum-idle: 10
+            maximum-pool-size: 100    # 【优化】50 → 100，Tomcat 500 线程争抢 50 连接是主要瓶颈
+            minimum-idle: 20          # 【优化】10 → 20，保持更多空闲连接
+            connection-timeout: 5000  # 【新增】获取连接超时 5s，避免无限等待
+            max-lifetime: 1800000     # 【新增】连接最大存活 30 分钟
+            leak-detection-threshold: 30000  # 【新增】连接泄漏检测 30s
     redis:
         host: localhost
         port: 17379
         password: 20020104CCjj+1
         database: 0
-        timeout: 5000ms
+        timeout: 3000ms             # 【优化】5000ms → 3000ms，Redis 操作不应超过 3s
         lettuce:
             pool:
-                max-active: 32
-                max-idle: 16
-                min-idle: 4
+                max-active: 64      # 【优化】32 → 64，每次 CONNECT/SEND/SUBSCRIBE 都操作 Redis
+                max-idle: 32        # 【优化】16 → 32
+                min-idle: 8         # 【优化】4 → 8
+                max-wait: 3000ms    # 【新增】获取连接最大等待时间
     jackson:
         date-format: yyyy-MM-dd HH:mm:ss
         time-zone: Asia/Shanghai
@@ -62,7 +68,6 @@ mybatis-plus:
             logic-delete-value: true
             logic-not-delete-value: false
 
-#
 jwt:
     secret: ${JWT_SECRET:Y2FtcHVzX2NoYXRfcGxhdGZvcm1fc2VjcmV0X2tleV9hdF9sZWFzdF8zMl9ieXRlcw==}
     issuer: campus-chat
@@ -80,15 +85,13 @@ campus:
         max-radius-meters: 500
         late-minutes: 10
         qr-secret: "cvfdjnvcdf_csdbcdce3efdsjn1w1hsh"
-        qr-ttl-seconds: 60          # 二维码有效期（秒），前端每 10 秒刷新一次
-        qr-size: 280                # 二维码 PNG 像素尺寸
+        qr-ttl-seconds: 60
+        qr-size: 280
     message:
         recall-window-seconds: 120
     security:
         login-fail-lock-threshold: 5
         login-fail-lock-minutes: 5
-
-
 
 logging:
     level:
@@ -96,3 +99,5 @@ logging:
         org.apache.rocketmq: warn
         com.baomidou.mybatisplus: error
         com.ccj.campus.chat.mapper: error
+        # 【新增】压测时打开 HikariCP 日志，观察连接池使用情况
+        # com.zaxxer.hikari: debug

@@ -6,19 +6,17 @@
 
     <select id="countTotalUnread" resultType="int">
         SELECT COALESCE(SUM(sub.cnt), 0)
-        FROM (
-                 SELECT (
-                            SELECT COUNT(*)
-                            FROM chat_message m
-                            WHERE m.room_id = c.room_id
-                              AND m.id > COALESCE(c.last_read_id, 0)
-                              AND m.from_uid != #{userId}
-                     AND m.status = 0
-             ) AS cnt
-            FROM chat_contact c
+        FROM (SELECT (SELECT COUNT(*)
+                      FROM chat_message m
+                      WHERE m.room_id = c.room_id
+                        AND m.id > COALESCE(c.last_read_id, 0)
+                        AND m.from_uid != #{userId}
+                  AND m.status = 0) AS cnt FROM chat_contact c
         WHERE c.user_id = #{userId}
           AND c.last_msg_id IS NOT NULL
-          AND (c.last_read_id IS NULL OR c.last_msg_id > c.last_read_id)
+          AND (c.last_read_id IS NULL
+           OR c.last_msg_id
+            > c.last_read_id)
             ) sub
     </select>
 
@@ -66,33 +64,31 @@
       排序：top DESC, 最新时间 DESC（符合 /contact/list 验收标准 4）
     -->
     <select id="listWithUnread" resultType="map">
-        SELECT
-            c.id                AS id,
-            c.room_id           AS room_id,
-            c.top               AS top,
-            c.mute              AS mute,
-            c.active_time       AS active_time,
-            r.type              AS type,
-            CASE
-                WHEN r.type = 2 THEN COALESCE(g.name, r.name, '群聊')
-                ELSE             COALESCE(u.name, '未知用户')
-                END                 AS name,
-            CASE
-                WHEN r.type = 2 THEN g.avatar
-                ELSE             u.avatar
-                END                 AS avatar,
-            m.content           AS last_content,
-            m.type              AS last_type,
-            m.status            AS last_status,
-            m.create_time       AS last_time,
-            COALESCE((
-                SELECT COUNT(*)
-                FROM chat_message msg
-                WHERE msg.room_id    = c.room_id
-                  AND msg.is_visible = TRUE
-                  AND msg.from_uid   != #{userId}
+        SELECT c.id                                           AS id,
+               c.room_id                                      AS room_id,
+               c.top                                          AS top,
+               c.mute                                         AS mute,
+               c.active_time                                  AS active_time,
+               r.type                                         AS type,
+               CASE
+                   WHEN r.type = 2 THEN COALESCE(g.name, r.name, '群聊')
+                   ELSE COALESCE(u.name, '未知用户')
+                   END                                        AS name,
+               CASE
+                   WHEN r.type = 2 THEN g.avatar
+                   ELSE u.avatar
+                   END                                        AS avatar,
+               m.content                                      AS last_content,
+               m.type                                         AS last_type,
+               m.status                                       AS last_status,
+               m.create_time                                  AS last_time,
+               COALESCE((SELECT COUNT(*)
+                         FROM chat_message msg
+                         WHERE msg.room_id = c.room_id
+                           AND msg.is_visible = TRUE
+                           AND msg.from_uid != #{userId}
                   AND (c.last_read_id IS NULL OR msg.id > c.last_read_id)
-            ), 0)               AS unread_count
+            ), 0) AS unread_count
         FROM chat_contact c
                  INNER JOIN chat_room r
                             ON r.id = c.room_id
@@ -105,7 +101,7 @@
                                AND u.id = CASE
                                               WHEN (r.ext_info ->> 'uid1')::bigint = #{userId}
                                                   THEN (r.ext_info ->> 'uid2')::bigint
-                                              ELSE     (r.ext_info ->> 'uid1')::bigint
+                                              ELSE (r.ext_info ->> 'uid1')::bigint
                                    END
                  LEFT JOIN LATERAL (
             SELECT content, type, status, create_time
@@ -114,9 +110,22 @@
               AND status != 2
         ORDER BY id DESC
             LIMIT 1
-            ) m ON TRUE
+            ) m
+        ON TRUE
         WHERE c.user_id = #{userId}
-        ORDER BY c.top DESC, COALESCE(m.create_time, c.active_time) DESC
+        ORDER BY c.top DESC, COALESCE (m.create_time, c.active_time) DESC
     </select>
+
+    <update id="updateLastMsg">
+        UPDATE chat_contact c
+        SET last_msg_id = #{msgId},
+            active_time = NOW() FROM (
+        SELECT id FROM chat_contact
+        WHERE room_id = #{roomId}
+            ORDER BY id
+            FOR UPDATE
+            ) locked
+        WHERE c.id = locked.id
+    </update>
 
 </mapper>
