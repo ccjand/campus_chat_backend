@@ -12,9 +12,11 @@ import com.ccj.campus.chat.mapper.*;
 import com.ccj.campus.chat.mq.MQTopic;
 import com.ccj.campus.chat.service.*;
 import com.ccj.campus.chat.websocket.OnlineUserService;
+import com.github.benmanes.caffeine.cache.Cache;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +41,10 @@ public class FriendServiceImpl implements FriendService {
     private final OnlineUserService onlineUserService;
     private final BadgeService badgeService;
     private final SysDepartmentMapper sysDepartmentMapper;
+    private final StringRedisTemplate stringRedisTemplate;
+
+    private final Cache<String, Boolean> friendCache;
+    private final Cache<String, Boolean> blockCache;
 
 
     @Override
@@ -250,6 +256,25 @@ public class FriendServiceImpl implements FriendService {
         BusinessException.check(!isBlocked(friendId, userId), ResultCode.BAD_REQUEST);
         insertFriend(userId, friendId);
         insertFriend(friendId, userId);
+
+        // 一致性：DB 写完后，立刻清 L1 + L2
+        evictFriendCache(userId, friendId);
+    }
+
+    private void evictFriendCache(Long a, Long b) {
+        String key = Math.min(a, b) + ":" + Math.max(a, b);
+        friendCache.invalidate(key);
+        stringRedisTemplate.delete("cache:friend:" + key);
+    }
+
+    private void evictBlockCache(Long userId, Long targetId) {
+        String key = userId + ":" + targetId;
+        blockCache.invalidate(key);
+        stringRedisTemplate.delete("cache:block:" + key);
+        // 反向也清一下，因为 handleSend 会查双向
+        String reverseKey = targetId + ":" + userId;
+        blockCache.invalidate(reverseKey);
+        stringRedisTemplate.delete("cache:block:" + reverseKey);
     }
 
     private void insertFriend(Long userId, Long friendId) {
@@ -266,12 +291,35 @@ public class FriendServiceImpl implements FriendService {
         UpdateWrapper<UserFriend> w2 = new UpdateWrapper<>();
         w2.eq("user_id", friendId).eq("friend_id", userId).set("deleted", true);
         friendMapper.update(null, w2);
+
+        evictFriendCache(userId, friendId);
     }
 
     @Override
     public boolean isFriend(Long userId, Long friendId) {
-        return friendMapper.selectRelation(userId, friendId) != null;
+        String key = Math.min(userId, friendId) + ":" + Math.max(userId, friendId);
+
+        // L1: Caffeine（纳秒级）
+        Boolean l1 = friendCache.getIfPresent(key);
+        if (l1 != null) return l1;
+
+        // L2: Redis（毫秒级）
+        String redisKey = "cache:friend:" + key;
+        String l2 = stringRedisTemplate.opsForValue().get(redisKey);
+        if (l2 != null) {
+            boolean result = "1".equals(l2);
+            friendCache.put(key, result);  // 回填 L1
+            return result;
+        }
+
+        // L3: DB
+        boolean result = friendMapper.selectRelation(userId, friendId) != null;
+        friendCache.put(key, result);                                               // 写 L1
+        stringRedisTemplate.opsForValue().set(redisKey, result ? "1" : "0",
+                java.time.Duration.ofMinutes(10));                                  // 写 L2
+        return result;
     }
+
 
     // ==================== 黑名单 ====================
 
@@ -287,6 +335,10 @@ public class FriendServiceImpl implements FriendService {
             blacklistMapper.insert(b);
         } catch (DuplicateKeyException ignore) {
         }
+
+        evictBlockCache(userId, targetId);
+        // 拉黑后好友关系也可能变化，顺便清掉
+        evictFriendCache(userId, targetId);
     }
 
     @Override
@@ -295,6 +347,8 @@ public class FriendServiceImpl implements FriendService {
         QueryWrapper<UserBlacklist> qw = new QueryWrapper<>();
         qw.eq("user_id", userId).eq("target_id", targetId);
         blacklistMapper.delete(qw);
+
+        evictBlockCache(userId, targetId);
     }
 
     @Override
@@ -304,7 +358,26 @@ public class FriendServiceImpl implements FriendService {
 
     @Override
     public boolean isBlocked(Long userId, Long targetId) {
-        return blacklistMapper.selectByUserAndTarget(userId, targetId) != null;
-    }
+        String key = userId + ":" + targetId;  // 有方向，不归一化
 
+        // L1
+        Boolean l1 = blockCache.getIfPresent(key);
+        if (l1 != null) return l1;
+
+        // L2
+        String redisKey = "cache:block:" + key;
+        String l2 = stringRedisTemplate.opsForValue().get(redisKey);
+        if (l2 != null) {
+            boolean result = "1".equals(l2);
+            blockCache.put(key, result);
+            return result;
+        }
+
+        // L3: DB
+        boolean result = blacklistMapper.selectByUserAndTarget(userId, targetId) != null;
+        blockCache.put(key, result);
+        stringRedisTemplate.opsForValue().set(redisKey, result ? "1" : "0",
+                java.time.Duration.ofMinutes(10));
+        return result;
+    }
 }

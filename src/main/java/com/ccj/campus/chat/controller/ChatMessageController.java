@@ -15,6 +15,7 @@ import com.ccj.campus.chat.service.MessageService;
 import com.ccj.campus.chat.service.OutboxService;
 import com.ccj.campus.chat.websocket.OnlineUserService;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.github.benmanes.caffeine.cache.Cache;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -39,11 +40,14 @@ public class ChatMessageController {
     private final SimpMessagingTemplate messagingTemplate;
     private final ChatRoomMapper chatRoomMapper;
     private final MessageService messageService;
-    private final ContactService contactService;
     private final StringRedisTemplate stringRedisTemplate;
     private final FriendService friendService;
     private final SysUserMapper sysUserMapper;
     private final OutboxService outboxService;
+
+    private final Cache<Long, SysUser> senderProfileCache;
+
+    private final Cache<Long, ChatRoom> roomCache;
 
 
     @MessageMapping("/chat/send")
@@ -66,7 +70,8 @@ public class ChatMessageController {
         if (msg.getCreateTime() == null) msg.setCreateTime(LocalDateTime.now());
         if (msg.getId() == null) msg.setId(messageService.prepareMessageId());
 
-        ChatRoom room = chatRoomMapper.selectById(msg.getRoomId());
+        ChatRoom room = roomCache.get(msg.getRoomId(), chatRoomMapper::selectById);
+
         if (room == null) {
             log.warn("roomId={} 不存在", msg.getRoomId());
             sendError(fromUid, "ROOM_NOT_FOUND", "房间不存在", msg.getClientSeq(), msg.getRoomId());
@@ -132,19 +137,19 @@ public class ChatMessageController {
         Map<String, Object> ext = msg.getExtInfo();
         if (ext == null) ext = new HashMap<>();
 
-        SysUser from = sysUserMapper.selectById(fromUid);
+        // Caffeine 缓存，miss 时自动回源 DB
+        SysUser from = senderProfileCache.get(fromUid, sysUserMapper::selectById);
+
         if (from != null) {
             Object sn = ext.get("senderName");
             if (sn == null || String.valueOf(sn).trim().isEmpty()) {
                 ext.put("senderName", from.getName());
             }
-
             Object sa = ext.get("senderAvatar");
             if (sa == null || String.valueOf(sa).trim().isEmpty()) {
                 ext.put("senderAvatar", from.getAvatar());
             }
         }
-
         msg.setExtInfo(ext);
     }
 
