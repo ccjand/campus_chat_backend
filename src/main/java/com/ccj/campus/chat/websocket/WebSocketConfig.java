@@ -70,17 +70,17 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         // 【优化】只挂一个拦截器，之前 JwtChannelInterceptor 重复校验了
         registration.interceptors(stompAuthChannelInterceptor)
                 .taskExecutor()
-                .corePoolSize(20)
-                .maxPoolSize(100)
-                .queueCapacity(500);
+                .corePoolSize(50)
+                .maxPoolSize(400)
+                .queueCapacity(2000);
     }
 
     @Override
     public void configureClientOutboundChannel(ChannelRegistration registration) {
         registration.taskExecutor()
-                .corePoolSize(20)
-                .maxPoolSize(200)
-                .queueCapacity(2000);
+                .corePoolSize(50)
+                .maxPoolSize(400)
+                .queueCapacity(4000);
     }
 
     @Bean

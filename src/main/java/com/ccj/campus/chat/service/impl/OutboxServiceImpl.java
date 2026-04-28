@@ -7,6 +7,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.rocketmq.client.producer.SendCallback;
 import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.client.producer.SendStatus;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
@@ -21,7 +22,7 @@ import java.util.List;
 
 /**
  * Outbox 服务实现。
- *
+ * <p>
  * 入队：业务事务内同库写入（Propagation.MANDATORY 强制共用事务，保证原子性）
  * 发送：独立 @Scheduled 定时任务扫描并发送，失败指数退避重试
  */
@@ -38,7 +39,7 @@ public class OutboxServiceImpl implements OutboxService {
     private final ObjectMapper objectMapper;
 
     @Override
-    @Transactional(propagation = Propagation.MANDATORY)
+    @Transactional(propagation = Propagation.REQUIRED)
     public void enqueue(String topic, String tag, Object payload) {
         try {
             MessageOutbox e = new MessageOutbox();
@@ -67,29 +68,37 @@ public class OutboxServiceImpl implements OutboxService {
         for (MessageOutbox e : pending) {
             try {
                 String dest = e.getTopic() + (e.getTag() == null ? "" : ":" + e.getTag());
-                SendResult sr = rocketMQTemplate.syncSend(
-                        dest, MessageBuilder.withPayload(e.getPayload()).build());
-                if (sr != null && sr.getSendStatus() == SendStatus.SEND_OK) {
-                    markSent(e.getId());
-                } else {
-                    markFailed(e, "sendStatus=" + (sr == null ? "null" : sr.getSendStatus()));
-                }
+                rocketMQTemplate.asyncSend(dest,
+                        MessageBuilder.withPayload(e.getPayload()).build(),
+                        new SendCallback() {
+                            @Override
+                            public void onSuccess(SendResult sendResult) {
+                                markSent(e.getId());
+                            }
+
+                            @Override
+                            public void onException(Throwable throwable) {
+                                markFailed(e, throwable.getMessage());
+                            }
+                        }, 30000);
             } catch (Exception ex) {
                 markFailed(e, ex.getMessage());
             }
         }
     }
 
-    @Transactional
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markSent(Long id) {
         MessageOutbox u = new MessageOutbox();
         u.setId(id);
         u.setStatus(MessageOutbox.STATUS_SENT);
         u.setSendTime(LocalDateTime.now());
         mapper.updateById(u);
+
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markFailed(MessageOutbox e, String err) {
         int retry = e.getRetryCount() + 1;
         MessageOutbox u = new MessageOutbox();
