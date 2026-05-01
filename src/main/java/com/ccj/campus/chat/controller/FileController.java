@@ -1,6 +1,7 @@
 package com.ccj.campus.chat.controller;
 
 import com.ccj.campus.chat.common.R;
+import com.ccj.campus.chat.ratelimit.RateLimit;
 import com.ccj.campus.chat.service.FileService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +43,7 @@ public class FileController {
      * 前端 uni.uploadFile 的 name 参数设为 "file"
      */
     @PostMapping("/upload")
+    @RateLimit(window = 60, maxRequests = 30, keyType = "user")
     public R<Map<String, Object>> upload(@RequestParam("file") MultipartFile file,
                                           @RequestParam(value = "type", defaultValue = "chat") String type) {
         // type 作为目录前缀：chat / avatar / leave-attachment / checkin 等
@@ -63,6 +65,7 @@ public class FileController {
      * 批量上传（一次选多张图片）
      */
     @PostMapping("/upload/batch")
+    @RateLimit(window = 60, maxRequests = 10, keyType = "user")
     public R<List<Map<String, Object>>> uploadBatch(@RequestParam("files") List<MultipartFile> files,
                                                       @RequestParam(value = "type", defaultValue = "chat") String type) {
         List<Map<String, Object>> results = files.stream().map(file -> {
@@ -85,6 +88,7 @@ public class FileController {
      * 上传头像（单独接口，方便限制大小和格式）
      */
     @PostMapping("/avatar")
+    @RateLimit(window = 60, maxRequests = 5, keyType = "user")
     public R<Map<String, Object>> uploadAvatar(@RequestParam("file") MultipartFile file) {
         // 头像限制 2MB
         if (file.getSize() > 2 * 1024 * 1024) {

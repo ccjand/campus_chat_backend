@@ -50,19 +50,15 @@ public class NoticeController {
 
     private boolean isAdmin(LoginUser user) {
         if (user == null || user.getRole() == null) return false;
-        int role = user.getRole();
-        return role == 0;
+        return user.getRole() == 0;
     }
 
     /**
      * 发布通知（仅管理员）
      */
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     @PostMapping("/publish")
     public R<Notice> publish(@RequestBody @Valid NoticeReq req) {
-        if (!isAdmin(LoginUser.current())) {
-            return R.fail(ResultCode.FORBIDDEN);
-        }
-
         Notice n = new Notice();
         n.setTitle(req.getTitle());
         n.setContent(req.getContent());
@@ -125,11 +121,11 @@ public class NoticeController {
         return uids;
     }
 
+
     @GetMapping("/{id}")
     public R<Notice> detail(@PathVariable Long id) {
         return R.ok(noticeMapper.selectById(id));
     }
-
     /**
      * 查询通知列表：
      * - 管理员：全部
@@ -170,6 +166,11 @@ public class NoticeController {
         return R.ok();
     }
 
+
+    /**
+     * 查询已读人数（仅管理员和教师可查看）
+     */
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_TEACHER')")
     @GetMapping("/{id}/readCount")
     public R<Integer> readCount(@PathVariable Long id) {
         return R.ok(noticeReadMapper.countByNotice(id));
@@ -212,6 +213,7 @@ public class NoticeController {
 
         return Collections.emptySet();
     }
+
 
     private boolean isNoticeVisible(Notice n, Long uid, Long deptId, Set<Long> classIds) {
         if (n == null) return false;

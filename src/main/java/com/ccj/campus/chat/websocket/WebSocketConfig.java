@@ -26,9 +26,6 @@ import org.springframework.web.socket.config.annotation.WebSocketTransportRegist
 @RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
-    // 【优化】只注入 StompAuthChannelInterceptor，它已经包含认证逻辑
-    // 之前同时注入了 JwtChannelInterceptor 和 JwtHandshakeInterceptor
-    // 两个拦截器做重复的 JWT 校验，浪费了握手时间
     private final StompAuthChannelInterceptor stompAuthChannelInterceptor;
     private final JwtHandshakeInterceptor jwtHandshakeInterceptor;
 

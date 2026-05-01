@@ -3,6 +3,7 @@ package com.ccj.campus.chat.controller;
 import com.ccj.campus.chat.common.R;
 import com.ccj.campus.chat.dto.UserLoginResp;
 import com.ccj.campus.chat.entity.SysUser;
+import com.ccj.campus.chat.ratelimit.RateLimit;
 import com.ccj.campus.chat.security.LoginUser;
 import com.ccj.campus.chat.service.UserService;
 import lombok.Data;
@@ -25,6 +26,7 @@ public class AuthController {
     private final UserService userService;
 
     @PostMapping("/login")
+    @RateLimit(window = 60, maxRequests = 10, keyType = "ip")
     public R<UserLoginResp> login(@RequestBody @Valid LoginReq req) {
         return R.ok(userService.login(req.getAccountNumber(), req.getPassword()));
     }

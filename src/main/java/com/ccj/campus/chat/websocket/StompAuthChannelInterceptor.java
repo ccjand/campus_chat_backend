@@ -34,7 +34,7 @@ import java.util.List;
 public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
     public static final String ONLINE_KEY_PREFIX = "ws:uid:";
-    public static final Duration ONLINE_TTL = Duration.ofSeconds(90);
+    public static final Duration ONLINE_TTL = Duration.ofMinutes(30);
 
     /**
      * 续期最小间隔（毫秒），90s TTL 下 30s 续一次足够

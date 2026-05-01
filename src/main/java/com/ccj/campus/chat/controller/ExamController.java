@@ -35,6 +35,7 @@ public class ExamController {
     /**
      * 管理员：录入考试
      */
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     @PostMapping("/create")
     public R<Exam> create(@RequestBody Exam exam) {
         exam.setCreateTime(LocalDateTime.now());
@@ -43,8 +44,9 @@ public class ExamController {
     }
 
     /**
-     * 管理员：查询考试列表（用于“考试列表”tag）
+     * 管理员：查询考试列表
      */
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     @GetMapping("/list")
     public R<List<Exam>> list(@RequestParam(defaultValue = "50") int size) {
         int safeSize = Math.max(1, Math.min(size, 200));
