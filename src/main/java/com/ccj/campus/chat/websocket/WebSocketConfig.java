@@ -39,13 +39,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
         registry.enableSimpleBroker("/topic", "/queue")
-                .setHeartbeatValue(new long[]{25000, 25000})
+                .setHeartbeatValue(new long[]{10000, 10000})
                 .setTaskScheduler(heartBeatTaskScheduler());
         registry.setApplicationDestinationPrefixes("/app");
         registry.setUserDestinationPrefix("/user");
-        // 【优化说明】如果后续并发继续增长，建议切换到外部 Broker：
-        // registry.enableStompBrokerRelay("/topic", "/queue")
-        //         .setRelayHost("localhost").setRelayPort(61613);
     }
 
     @Override

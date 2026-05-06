@@ -19,6 +19,6 @@ public class BadgeController {
     @GetMapping
     public R<BadgeVO> badge() {
         LoginUser lu = LoginUser.current();
-        return R.ok(badgeService.getBadge(lu.getUid(), lu.getRole()));
+        return R.ok(badgeService.getBadge(lu.getUid()));
     }
 }

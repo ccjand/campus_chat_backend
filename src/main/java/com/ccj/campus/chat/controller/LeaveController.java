@@ -19,6 +19,10 @@ import java.util.Map;
 /**
  * 请假接口。对齐论文 5.4：
  * "审批人可直接在聊天界面内嵌的请假卡片上完成审批操作，审批结果即时反馈给学生。"
+ * <p>
+ * 审批权限：
+ * 辅导员(ROLE_COUNSELOR) —— 审批自己管理班级的学生请假
+ * 院长(ROLE_STAFF)       —— 审批自己管理的教师/辅导员请假
  */
 @RestController
 @RequestMapping("/leave")
@@ -27,8 +31,8 @@ public class LeaveController {
 
     private final LeaveService leaveService;
 
-    // 允许学生和教师都能发起请假
-    @PreAuthorize("hasAnyAuthority('ROLE_STUDENT','ROLE_TEACHER')")
+    // 学生、教师、辅导员 都可以发起请假（辅导员向院长请假）
+    @PreAuthorize("hasAnyAuthority('ROLE_STUDENT','ROLE_TEACHER','ROLE_COUNSELOR')")
     @PostMapping("/apply")
     public R<LeaveApplication> apply(@RequestBody @Valid LeaveApplyReq req) {
         return R.ok(leaveService.apply(
@@ -43,9 +47,9 @@ public class LeaveController {
     }
 
     /**
-     * 审批人：通过
+     * 审批人：通过（只有辅导员和院长）
      */
-    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_COUNSELOR','ROLE_STAFF')")
     @PostMapping("/approve")
     public R<Void> approve(@RequestBody @Valid ApproveReq req) {
         leaveService.approve(LoginUser.currentUid(), req.getLeaveId(), req.getNote());
@@ -53,17 +57,17 @@ public class LeaveController {
     }
 
     /**
-     * 审批人：驳回
+     * 审批人：驳回（只有辅导员和院长）
      */
-    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_COUNSELOR','ROLE_STAFF')")
     @PostMapping("/reject")
     public R<Void> reject(@RequestBody @Valid ApproveReq req) {
         leaveService.reject(LoginUser.currentUid(), req.getLeaveId(), req.getNote());
         return R.ok();
     }
 
-    // 允许学生和教师都能撤销请假
-    @PreAuthorize("hasAnyAuthority('ROLE_STUDENT','ROLE_TEACHER')")
+    // 学生、教师、辅导员 都可以撤销自己的请假
+    @PreAuthorize("hasAnyAuthority('ROLE_STUDENT','ROLE_TEACHER','ROLE_COUNSELOR')")
     @PostMapping("/revoke")
     public R<Void> revoke(@RequestParam Long leaveId) {
         leaveService.revoke(LoginUser.currentUid(), leaveId);
@@ -71,16 +75,16 @@ public class LeaveController {
     }
 
     /**
-     * 审批人：待审列表
+     * 审批人：待审列表（只有辅导员和院长）
      */
-    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_COUNSELOR','ROLE_STAFF')")
     @GetMapping("/pending")
     public R<List<LeaveApplication>> pending() {
         return R.ok(leaveService.listPending(LoginUser.currentUid()));
     }
 
     /**
-     * 学生：自己的请假历史
+     * 申请人：自己的请假历史
      */
     @GetMapping("/mine")
     public R<List<LeaveApplication>> mine() {

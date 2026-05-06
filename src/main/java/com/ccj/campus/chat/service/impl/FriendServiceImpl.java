@@ -103,7 +103,7 @@ public class FriendServiceImpl implements FriendService {
             existing.setUpdateTime(LocalDateTime.now());
             requestMapper.updateById(existing);
             // 刷新被申请方通讯录红点
-            badgeService.pushBadgeIfOnline(toId, null);
+            badgeService.pushBadgeIfOnline(toId);
             return;
         }
 
@@ -115,7 +115,7 @@ public class FriendServiceImpl implements FriendService {
             old.setReason(reason);
             old.setUpdateTime(LocalDateTime.now());
             requestMapper.updateById(old);
-            badgeService.pushBadgeIfOnline(toId, null);
+            badgeService.pushBadgeIfOnline(toId);
             return;
         }
 
@@ -129,7 +129,7 @@ public class FriendServiceImpl implements FriendService {
         requestMapper.insert(req);
 
         // 通知被申请方通讯录 tab 出现红点
-        badgeService.pushBadgeIfOnline(toId, null);
+        badgeService.pushBadgeIfOnline(toId);
     }
 
     @Override
@@ -197,7 +197,7 @@ public class FriendServiceImpl implements FriendService {
         // 通知申请者：你的好友申请已被拒绝
         pushRequestResult(req, 2);
 
-        badgeService.pushBadgeIfOnline(currentUid, null);
+        badgeService.pushBadgeIfOnline(currentUid);
     }
 
     /**

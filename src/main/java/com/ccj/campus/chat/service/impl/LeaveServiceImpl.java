@@ -61,7 +61,7 @@ public class LeaveServiceImpl implements LeaveService {
         onlineUserService.push(approverId, "/queue/messages", card);
 
         // 通知审批人工作台 tab 出现红点
-        badgeService.pushBadgeIfOnline(approverId, 2);
+        badgeService.pushBadgeIfOnline(approverId);
 
         return app;
     }
@@ -77,7 +77,7 @@ public class LeaveServiceImpl implements LeaveService {
         pushResult(app, "approved", note);
 
         // 审批后刷新自己的工作台红点（可能清除）
-        badgeService.pushBadgeIfOnline(approverId, 2);
+        badgeService.pushBadgeIfOnline(approverId);
     }
 
     @Override
@@ -91,7 +91,7 @@ public class LeaveServiceImpl implements LeaveService {
         pushResult(app, "rejected", note);
 
         // 审批后刷新自己的工作台红点
-        badgeService.pushBadgeIfOnline(approverId, 2);
+        badgeService.pushBadgeIfOnline(approverId);
     }
 
     @Override
@@ -104,7 +104,7 @@ public class LeaveServiceImpl implements LeaveService {
         transition(app, LeaveApplication.STATUS_REVOKED, applicantId, "学生主动撤回");
 
         // 撤回后刷新审批人的工作台红点
-        badgeService.pushBadgeIfOnline(app.getApproverId(), 2);
+        badgeService.pushBadgeIfOnline(app.getApproverId());
     }
 
     @Override

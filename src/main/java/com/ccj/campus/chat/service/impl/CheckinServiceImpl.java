@@ -422,7 +422,11 @@ public class CheckinServiceImpl implements CheckinService {
     public CheckinRecord checkinByCode(Long studentId, String code) {
         // 按签到码查找进行中的会话
         QueryWrapper<CheckinSession> qw = new QueryWrapper<>();
-        qw.eq("code", code).eq("status", CheckinSession.STATUS_ACTIVE);
+        qw.eq("code", code)
+                .eq("status", CheckinSession.STATUS_ACTIVE)
+                .gt("end_time", LocalDateTime.now())
+                .orderByDesc("start_time")
+                .last("LIMIT 1");
         CheckinSession session = sessionMapper.selectOne(qw);
         if (session == null) {
             throw new BusinessException(ResultCode.CHECKIN_CODE_WRONG);
@@ -501,7 +505,7 @@ public class CheckinServiceImpl implements CheckinService {
             }
             // 红点：让老师端工作台角标刷新（和好友申请的红点走同一通道）
             try {
-                badgeService.pushBadgeIfOnline(teacherId, null);
+                badgeService.pushBadgeIfOnline(teacherId);
             } catch (Exception ignore) {
                 // 即便 badge 推送失败也不影响主流程
             }
@@ -558,7 +562,7 @@ public class CheckinServiceImpl implements CheckinService {
             onlineUserService.push(s.getStudentId(), "/queue/messages", evt);
         }
         try {
-            badgeService.pushBadgeIfOnline(s.getStudentId(), null);
+            badgeService.pushBadgeIfOnline(s.getStudentId());
         } catch (Exception ignore) {
         }
     }

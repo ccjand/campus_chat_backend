@@ -156,7 +156,7 @@ public class MessageServiceImpl implements MessageService {
         }
 
         // 已读后刷新自己的消息 tab 未读数
-        badgeService.pushBadgeIfOnline(readerId, null);
+        badgeService.pushBadgeIfOnline(readerId);
     }
 
     @Override
