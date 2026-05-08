@@ -37,13 +37,14 @@ public class BadgeServiceImpl implements BadgeService {
         boolean contactDot = friendRequestMapper.selectCount(frQw) > 0;
 
         // 只有辅导员(3)和院长(4)才有请假审批权限，才需要显示工作台红点
-        boolean workbenchDot = false;
+        boolean leaveDot = false;
         if (role != null && (role == SysUser.ROLE_COUNSELOR || role == SysUser.ROLE_STAFF)) {
             QueryWrapper<LeaveApplication> leaveQw = new QueryWrapper<>();
             leaveQw.eq("approver_id", uid).eq("status", 0);
-            workbenchDot = leaveMapper.selectCount(leaveQw) > 0;
+            leaveDot = leaveMapper.selectCount(leaveQw) > 0;
         }
 
+        boolean workbenchDot = leaveDot;
         boolean mineDot = false;
 
         return BadgeVO.builder()
@@ -51,6 +52,7 @@ public class BadgeServiceImpl implements BadgeService {
                 .contactDot(contactDot)
                 .workbenchDot(workbenchDot)
                 .mineDot(mineDot)
+                .leaveDot(leaveDot)
                 .build();
     }
 
