@@ -91,6 +91,16 @@ public class LeaveController {
         return R.ok(leaveService.listMine(LoginUser.currentUid()));
     }
 
+    /**
+     * 申请人：标记审批结果已读
+     */
+    @PostMapping("/markResultRead")
+    public R<Void> markResultRead() {
+        Long uid = LoginUser.currentUid();
+        leaveService.markResultRead(uid);
+        return R.ok();
+    }
+
     @Data
     static class LeaveApplyReq {
         @NotNull

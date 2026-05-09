@@ -1,15 +1,12 @@
 package com.ccj.campus.chat.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.ccj.campus.chat.common.BusinessException;
 import com.ccj.campus.chat.common.ResultCode;
 import com.ccj.campus.chat.dto.ChatMessageDTO;
-import com.ccj.campus.chat.entity.Contact;
-import com.ccj.campus.chat.entity.Message;
-import com.ccj.campus.chat.entity.MessageRead;
-import com.ccj.campus.chat.mapper.ContactMapper;
-import com.ccj.campus.chat.mapper.MessageMapper;
-import com.ccj.campus.chat.mapper.MessageReadMapper;
+import com.ccj.campus.chat.entity.*;
+import com.ccj.campus.chat.mapper.*;
 import com.ccj.campus.chat.mq.OfflineMessageConsumer;
 import com.ccj.campus.chat.service.BadgeService;
 import com.ccj.campus.chat.service.MessageService;
@@ -47,6 +44,10 @@ public class MessageServiceImpl implements MessageService {
     private final RedisTemplate<String, String> redisTemplate;
     private final ObjectMapper objectMapper;
     private final BadgeService badgeService;
+
+    private final ChatRoomMapper chatRoomMapper;
+    private final ChatGroupMapper chatGroupMapper;
+    private final ChatGroupMemberMapper chatGroupMemberMapper;
 
     /**
      * 对齐论文 3.2: 2 分钟内可撤回
@@ -118,12 +119,40 @@ public class MessageServiceImpl implements MessageService {
         int n = messageMapper.recall(msgId, uid);
         if (n == 0) throw new BusinessException(ResultCode.MSG_RECALL_TIMEOUT);
 
-        // 广播房间，让双方 UI 同步
+        // 通知房间所有在线成员（统一走 /user/queue/messages）
         Map<String, Object> evt = new HashMap<>();
         evt.put("event", "recall");
         evt.put("msgId", msgId);
         evt.put("roomId", m.getRoomId());
-        onlineUserService.broadcast("/topic/room/" + m.getRoomId(), evt);
+
+        ChatRoom room = chatRoomMapper.selectById(m.getRoomId());
+        if (room != null) {
+            if (room.getType() == ChatRoom.TYPE_SINGLE) {
+                // 单聊：推送给双方
+                Map<String, Object> ext = room.getExtInfo();
+                if (ext != null) {
+                    Long uid1 = Long.parseLong(ext.get("uid1").toString());
+                    Long uid2 = Long.parseLong(ext.get("uid2").toString());
+                    if (onlineUserService.isOnline(uid1))
+                        onlineUserService.push(uid1, "/queue/messages", evt);
+                    if (onlineUserService.isOnline(uid2))
+                        onlineUserService.push(uid2, "/queue/messages", evt);
+                }
+            } else {
+                // 群聊：推送给所有在线群成员
+                QueryWrapper<ChatGroup> gq = new QueryWrapper<ChatGroup>()
+                        .eq("room_id", m.getRoomId()).eq("deleted", false);
+                ChatGroup group = chatGroupMapper.selectOne(gq);
+                if (group != null) {
+                    List<Long> members = chatGroupMemberMapper.listMemberUids(group.getId());
+                    for (Long memberUid : members) {
+                        if (onlineUserService.isOnline(memberUid)) {
+                            onlineUserService.push(memberUid, "/queue/messages", evt);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     @Override

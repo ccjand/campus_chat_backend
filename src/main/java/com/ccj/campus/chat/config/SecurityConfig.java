@@ -49,7 +49,7 @@ public class SecurityConfig {
                         "/ws/**",
                         "/error").permitAll()
                 .antMatchers("/admin/**").hasAuthority("ROLE_ADMIN")
-                .antMatchers(HttpMethod.POST, "/checkin/teacher/**").hasAnyAuthority("ROLE_TEACHER", "ROLE_ADMIN")
+                .antMatchers(HttpMethod.POST, "/checkin/teacher/**").hasAnyAuthority("ROLE_TEACHER", "ROLE_COUNSELOR", "ROLE_STAFF", "ROLE_ADMIN")
                 .anyRequest().authenticated()
                 .and()
                 .exceptionHandling()

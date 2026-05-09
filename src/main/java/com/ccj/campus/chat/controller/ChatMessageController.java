@@ -1,6 +1,7 @@
 package com.ccj.campus.chat.controller;
 
 import com.ccj.campus.chat.dto.ChatMessageDTO;
+import com.ccj.campus.chat.entity.ChatGroup;
 import com.ccj.campus.chat.entity.ChatRoom;
 import com.ccj.campus.chat.entity.ChatGroupMember;
 import com.ccj.campus.chat.entity.SysUser;
@@ -45,9 +46,13 @@ public class ChatMessageController {
     private final SysUserMapper sysUserMapper;
     private final OutboxService outboxService;
 
+    private final ChatGroupMapper chatGroupMapper;
+
     private final Cache<Long, SysUser> senderProfileCache;
 
     private final Cache<Long, ChatRoom> roomCache;
+
+    private final ChatGroupMemberMapper chatGroupMemberMapper;
 
 
     @MessageMapping("/chat/send")
@@ -117,9 +122,28 @@ public class ChatMessageController {
             messagingTemplate.convertAndSendToUser(fromUid.toString(), "/queue/messages", msg);
 
         } else {
-            // 群聊广播
-            messagingTemplate.convertAndSend("/topic/room/" + msg.getRoomId(), msg);
-            log.info("群聊广播 ✅ room={} from={} msgId={}", msg.getRoomId(), fromUid, msg.getId());
+            // ====== 群聊：遍历群成员，逐个推送到 /user/queue/messages ======
+            QueryWrapper<ChatGroup> gq = new QueryWrapper<ChatGroup>()
+                    .eq("room_id", msg.getRoomId())
+                    .eq("deleted", false);
+            ChatGroup group = chatGroupMapper.selectOne(gq);
+
+            if (group != null) {
+                List<Long> memberUids = chatGroupMemberMapper.listMemberUids(group.getId());
+                int pushed = 0;
+                for (Long uid : memberUids) {
+                    if (Boolean.TRUE.equals(stringRedisTemplate.hasKey("ws:uid:" + uid))) {
+                        messagingTemplate.convertAndSendToUser(
+                                uid.toString(), "/queue/messages", msg);
+                        pushed++;
+                    }
+                    // 离线成员不入队——前端重连时会走 fetchSinceLastMessage 自动补齐
+                }
+                log.info("群聊推送 ✅ room={} from={} msgId={} 在线推送={}/{}",
+                        msg.getRoomId(), fromUid, msg.getId(), pushed, memberUids.size());
+            } else {
+                log.warn("群聊房间 roomId={} 找不到对应群组，消息丢弃", msg.getRoomId());
+            }
         }
 
         // 持久化改为异步（用 @Async 或单独线程），不阻塞广播

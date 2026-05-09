@@ -13,6 +13,11 @@ import java.util.Map;
 public interface LeaveService {
 
     /**
+     * 申请人：标记所有审批结果为已读
+     */
+    void markResultRead(Long applicantId);
+
+    /**
      * 学生：提交请假申请
      */
     LeaveApplication apply(Long applicantId, Long approverId, int type,

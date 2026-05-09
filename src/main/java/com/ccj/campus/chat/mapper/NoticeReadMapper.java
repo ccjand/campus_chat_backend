@@ -11,4 +11,7 @@ public interface NoticeReadMapper extends BaseMapper<NoticeRead> {
 
     /** 统计某通知的已读人数 */
     int countByNotice(@Param("noticeId") Long noticeId);
+
+    /** 统计该用户近30天未读通知数 */
+    int countUnreadByUser(@Param("userId") Long userId);
 }

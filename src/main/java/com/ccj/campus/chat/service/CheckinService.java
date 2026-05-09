@@ -1,5 +1,6 @@
 package com.ccj.campus.chat.service;
 
+import com.ccj.campus.chat.controller.CheckinController;
 import com.ccj.campus.chat.dto.*;
 import com.ccj.campus.chat.entity.CheckinRecord;
 import com.ccj.campus.chat.entity.CheckinSession;
@@ -77,7 +78,7 @@ public interface CheckinService {
     /**
      * 学生：GPS 签到
      */
-    CheckinRecord checkin(Long studentId, Long sessionId, double lat, double lon);
+    CheckinRecord checkin(Long studentId, StudentCheckinReq req);
 
     /**
      * 学生：签到码签到

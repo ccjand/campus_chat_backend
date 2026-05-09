@@ -75,7 +75,7 @@ jwt:
 
 # MinIO
 minio:
-    endpoint: http://localhost:19000
+    endpoint: http://115.190.249.67:19000
     access-key: ccjj
     secret-key: 3177587750CCjj+1
     bucket: campus-chat

@@ -8,6 +8,7 @@ import com.ccj.campus.chat.entity.SysUser;
 import com.ccj.campus.chat.mapper.ContactMapper;
 import com.ccj.campus.chat.mapper.FriendRequestMapper;
 import com.ccj.campus.chat.mapper.LeaveApplicationMapper;
+import com.ccj.campus.chat.mapper.NoticeReadMapper;
 import com.ccj.campus.chat.mapper.SysUserMapper;
 import com.ccj.campus.chat.service.BadgeService;
 import com.ccj.campus.chat.websocket.OnlineUserService;
@@ -23,6 +24,7 @@ public class BadgeServiceImpl implements BadgeService {
     private final LeaveApplicationMapper leaveMapper;
     private final OnlineUserService onlineUserService;
     private final SysUserMapper sysUserMapper;
+    private final NoticeReadMapper noticeReadMapper;
 
     @Override
     public BadgeVO getBadge(Long uid) {
@@ -44,7 +46,14 @@ public class BadgeServiceImpl implements BadgeService {
             leaveDot = leaveMapper.selectCount(leaveQw) > 0;
         }
 
-        boolean workbenchDot = leaveDot;
+        // 通知未读红点：近30天内有未读通知就显示
+        boolean noticeDot = false;
+        try {
+            noticeDot = noticeReadMapper.countUnreadByUser(uid) > 0;
+        } catch (Exception ignore) {
+        }
+
+        boolean workbenchDot = leaveDot || noticeDot;
         boolean mineDot = false;
 
         return BadgeVO.builder()
@@ -53,6 +62,7 @@ public class BadgeServiceImpl implements BadgeService {
                 .workbenchDot(workbenchDot)
                 .mineDot(mineDot)
                 .leaveDot(leaveDot)
+                .noticeDot(noticeDot)
                 .build();
     }
 

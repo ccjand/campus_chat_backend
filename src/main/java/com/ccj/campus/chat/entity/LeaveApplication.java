@@ -50,6 +50,8 @@ public class LeaveApplication implements Serializable {
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 
+    private Boolean resultRead;
+
     @TableField(exist = false)
     private String applicantName;
 

@@ -15,4 +15,30 @@
         WHERE notice_id = #{noticeId}
     </select>
 
+    <select id="countUnreadByUser" resultType="int">
+        SELECT COUNT(*)
+        FROM notice n
+        WHERE n.create_time > NOW() - INTERVAL '30 days'
+          AND NOT EXISTS (
+            SELECT 1 FROM notice_read nr
+            WHERE nr.notice_id = n.id AND nr.user_id = #{userId}
+            )
+          AND (
+        -- 全量通知：所有人可见
+            n.scope_type = 1
+        -- 班级通知：只有属于该班级的用户可见
+           OR (n.scope_type = 3 AND EXISTS (
+            SELECT 1 FROM sys_user_class_rel ucr
+            WHERE ucr.user_id = #{userId}
+          AND ucr.class_id = COALESCE((n.scope_data ->> 'classId')::bigint, -1)
+            ))
+        -- 院系通知：只有属于该院系的用户可见
+           OR (n.scope_type = 2 AND (
+            SELECT department_id FROM sys_user WHERE id = #{userId}
+            ) = COALESCE((n.scope_data ->> 'departmentId')::bigint, -1))
+        -- 个人通知：指定用户可见
+           OR (n.scope_type = 4 AND
+            (n.scope_data ->> 'userId')::text = #{userId}::text)
+            )
+    </select>
 </mapper>

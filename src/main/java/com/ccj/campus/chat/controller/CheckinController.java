@@ -46,7 +46,7 @@ public class CheckinController {
      * 教师端：我负责的课程下拉列表。
      * 对齐前端 /capi/checkin/teacher/courses。
      */
-    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_COUNSELOR','ROLE_STAFF','ROLE_ADMIN')")
     @GetMapping("/teacher/courses")
     public R<List<TeacherCourseVO>> myCourses() {
         return R.ok(checkinService.listTeacherCourses(LoginUser.currentUid()));
@@ -56,7 +56,7 @@ public class CheckinController {
      * 教师端：课程对应的班级列表（供发起签到时选择班级范围）。
      * 对齐前端 /capi/checkin/teacher/course/{courseId}/classes。
      */
-    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_COUNSELOR','ROLE_STAFF','ROLE_ADMIN')")
     @GetMapping("/teacher/course/{courseId}/classes")
     public R<List<CourseClassVO>> courseClasses(@PathVariable Long courseId) {
         return R.ok(checkinService.listCourseClasses(LoginUser.currentUid(), courseId));
@@ -65,7 +65,7 @@ public class CheckinController {
     /**
      * 教师发起签到
      */
-    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_COUNSELOR','ROLE_STAFF','ROLE_ADMIN')")
     @PostMapping("/teacher/session")
     public R<CheckinSession> createSession(@RequestBody @Valid CreateSessionReq req) {
         Long uid = LoginUser.currentUid();
@@ -78,7 +78,7 @@ public class CheckinController {
     /**
      * 教师设置签到码
      */
-    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_COUNSELOR','ROLE_STAFF','ROLE_ADMIN')")
     @PostMapping("/teacher/session/{sessionId}/code")
     public R<String> setCode(@PathVariable Long sessionId, @RequestBody CodeReq req) {
         return R.ok(checkinService.setSessionCode(sessionId, req.getCode()));
@@ -88,7 +88,7 @@ public class CheckinController {
      * 教师生成/刷新签到二维码。
      * 返回: { sessionId, content, imageBase64, expireAt }
      */
-    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_COUNSELOR','ROLE_STAFF','ROLE_ADMIN')")
     @PostMapping("/teacher/session/{sessionId}/qrcode")
     public R<Map<String, Object>> getSessionQr(@PathVariable Long sessionId) {
         Long uid = LoginUser.currentUid();
@@ -106,7 +106,7 @@ public class CheckinController {
     /**
      * 教师查看签到记录
      */
-    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_COUNSELOR','ROLE_STAFF','ROLE_ADMIN')")
     @GetMapping("/teacher/session/{sessionId}/records")
     public R<List<CheckinRecord>> records(@PathVariable Long sessionId) {
         return R.ok(checkinService.listRecords(sessionId));
@@ -117,7 +117,7 @@ public class CheckinController {
      * 对齐好友申请 /friend/request/received。
      * 默认只返回 status=0 (pending)；传 all=true 则返回全部（含已批/已拒）。
      */
-    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_COUNSELOR','ROLE_STAFF','ROLE_ADMIN')")
     @GetMapping("/teacher/supplements")
     public R<List<TeacherSupplementVO>> mySupplements(
             @RequestParam(defaultValue = "false") boolean all) {
@@ -127,7 +127,7 @@ public class CheckinController {
     /**
      * 教师审批补签
      */
-    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_TEACHER','ROLE_COUNSELOR','ROLE_STAFF','ROLE_ADMIN')")
     @PostMapping("/teacher/supplement/{id}/approve")
     public R<Void> approveSupplement(@PathVariable Long id,
                                      @RequestBody ApproveReq req) {
@@ -162,8 +162,7 @@ public class CheckinController {
     @PreAuthorize("hasAuthority('ROLE_STUDENT')")
     @PostMapping("/student/checkin")
     public R<CheckinRecord> checkin(@RequestBody @Valid StudentCheckinReq req) {
-        return R.ok(checkinService.checkin(LoginUser.currentUid(),
-                req.getSessionId(), req.getLatitude(), req.getLongitude()));
+        return R.ok(checkinService.checkin(LoginUser.currentUid(), req));
     }
 
     /**
@@ -219,15 +218,7 @@ public class CheckinController {
         private List<Long> classIds;
     }
 
-    @Data
-    static class StudentCheckinReq {
-        @NotNull
-        private Long sessionId;
-        @NotNull
-        private Double latitude;
-        @NotNull
-        private Double longitude;
-    }
+
 
     @Data
     static class CodeReq {

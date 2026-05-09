@@ -30,6 +30,17 @@ public class LeaveServiceImpl implements LeaveService {
     private final BadgeService badgeService;
 
     @Override
+    public void markResultRead(Long applicantId) {
+        leaveMapper.update(null,
+                new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<LeaveApplication>()
+                        .eq("applicant_id", applicantId)
+                        .in("status", LeaveApplication.STATUS_APPROVED, LeaveApplication.STATUS_REJECTED)
+                        .eq("result_read", false)
+                        .set("result_read", true)
+                        .set("update_time", LocalDateTime.now()));
+    }
+
+    @Override
     @Transactional
     public LeaveApplication apply(Long applicantId, Long approverId, int type,
                                   String reason, LocalDateTime startTime, LocalDateTime endTime,
@@ -63,6 +74,12 @@ public class LeaveServiceImpl implements LeaveService {
         // 通知审批人工作台 tab 出现红点
         badgeService.pushBadgeIfOnline(approverId);
 
+        // 通过 /queue/messages 推事件给审批人（跟通知公告同一个通道）
+        Map<String, Object> evt = new HashMap<>();
+        evt.put("event", "leave_pending");
+        evt.put("leaveId", app.getId());
+        onlineUserService.push(approverId, "/queue/messages", evt);
+
         return app;
     }
 
@@ -74,10 +91,17 @@ public class LeaveServiceImpl implements LeaveService {
         BusinessException.check(app.getStatus() == LeaveApplication.STATUS_PENDING, ResultCode.LEAVE_STATE_INVALID);
 
         transition(app, LeaveApplication.STATUS_APPROVED, approverId, note);
+
+        // ★ 新增：标记申请人有未读审批结果
+        app.setResultRead(false);
+        leaveMapper.updateById(app);
+
         pushResult(app, "approved", note);
 
         // 审批后刷新自己的工作台红点（可能清除）
         badgeService.pushBadgeIfOnline(approverId);
+        // 推送红点给申请人
+        badgeService.pushBadgeIfOnline(app.getApplicantId());
     }
 
     @Override
@@ -88,10 +112,17 @@ public class LeaveServiceImpl implements LeaveService {
         BusinessException.check(app.getStatus() == LeaveApplication.STATUS_PENDING, ResultCode.LEAVE_STATE_INVALID);
 
         transition(app, LeaveApplication.STATUS_REJECTED, approverId, note);
+
+        // ★ 新增：标记申请人有未读审批结果
+        app.setResultRead(false);
+        leaveMapper.updateById(app);
+
         pushResult(app, "rejected", note);
 
         // 审批后刷新自己的工作台红点
         badgeService.pushBadgeIfOnline(approverId);
+        // 推送红点给申请人
+        badgeService.pushBadgeIfOnline(app.getApplicantId());
     }
 
     @Override

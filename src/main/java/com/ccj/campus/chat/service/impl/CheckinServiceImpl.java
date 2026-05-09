@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.ccj.campus.chat.common.BusinessException;
 import com.ccj.campus.chat.common.ResultCode;
+import com.ccj.campus.chat.controller.CheckinController;
 import com.ccj.campus.chat.dto.*;
 import com.ccj.campus.chat.entity.*;
 import com.ccj.campus.chat.mapper.*;
@@ -356,11 +357,11 @@ public class CheckinServiceImpl implements CheckinService {
 
     @Override
     @Transactional
-    public CheckinRecord checkin(Long studentId, Long sessionId, double lat, double lon) {
-        CheckinSession session = sessionMapper.selectById(sessionId);
+    public CheckinRecord checkin(Long studentId, StudentCheckinReq req) {
+        CheckinSession session = sessionMapper.selectById(req.getSessionId());
         if (session == null) throw new RuntimeException("签到会话不存在");
 
-        // 👇 新增拦截：如果该签到没有记录定位，说明不支持定位签到
+        // 如果该签到没有记录定位，说明不支持定位签到
         if (session.getCenterLatitude() == null) {
             throw new RuntimeException("该签到不支持定位签到，请使用对应的扫码或签到码");
         }
@@ -378,16 +379,24 @@ public class CheckinServiceImpl implements CheckinService {
             throw new BusinessException(ResultCode.CHECKIN_SESSION_ENDED);
         }
 
-        // 对齐论文 5.3 公式 (5.1)：球面距离计算
+        // 球面距离计算
         double centerLat = session.getCenterLatitude().doubleValue();
         double centerLon = session.getCenterLongitude().doubleValue();
-        int distance = GeoUtils.distanceMeters(lat, lon, centerLat, centerLon);
-        boolean inFence = distance <= session.getRadiusMeters();
 
-        // 确定签到状态
+        int distance = GeoUtils.distanceMeters(req.getLatitude(), req.getLongitude(), centerLat, centerLon);
+
+        // 例如 GPS 精度 80m + 教师设定半径 100m = 实际允许 180m
+        int accuracyBuffer = 0;
+        if (req.getAccuracy() != null && req.getAccuracy() > 0) {
+            accuracyBuffer = (int) Math.ceil(req.getAccuracy());
+        }
+        int effectiveRadius = session.getRadiusMeters() + accuracyBuffer;
+        boolean inFence = distance <= effectiveRadius;
+
         int status;
         if (!inFence) {
-            throw new BusinessException(ResultCode.CHECKIN_NOT_IN_RANGE, "不在签到范围内");
+            throw new BusinessException(ResultCode.CHECKIN_NOT_IN_RANGE,
+                    "不在签到范围内（距离" + distance + "m，允许" + effectiveRadius + "m）");
         }
 
         // 对齐论文 5.3："已过签到开始时间 10 分钟以上的标记为迟到"
@@ -400,10 +409,10 @@ public class CheckinServiceImpl implements CheckinService {
 
         CheckinRecord record = new CheckinRecord();
         record.setType(CheckinRecord.TYPE_QR);
-        record.setSessionId(sessionId);
+        record.setSessionId(req.getSessionId());
         record.setStudentId(studentId);
-        record.setLatitude(BigDecimal.valueOf(lat));
-        record.setLongitude(BigDecimal.valueOf(lon));
+        record.setLatitude(BigDecimal.valueOf(req.getLatitude()));
+        record.setLongitude(BigDecimal.valueOf(req.getLongitude()));
         record.setDistanceM(distance);
         record.setStatus(status);
         record.setCheckinTime(now);

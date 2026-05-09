@@ -13,6 +13,7 @@ import com.ccj.campus.chat.mapper.NoticeReadMapper;
 import com.ccj.campus.chat.mapper.SysUserClassRelMapper;
 import com.ccj.campus.chat.mapper.SysUserMapper;
 import com.ccj.campus.chat.security.LoginUser;
+import com.ccj.campus.chat.service.BadgeService;
 import com.ccj.campus.chat.websocket.OnlineUserService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +42,7 @@ public class NoticeController {
     private final NoticeMapper noticeMapper;
     private final NoticeReadMapper noticeReadMapper;
     private final OnlineUserService onlineUserService;
+    private final BadgeService badgeService;
 
     // 新增
     private final SysUserMapper sysUserMapper;
@@ -91,6 +93,8 @@ public class NoticeController {
 
         for (Long uid : targetUids) {
             onlineUserService.push(uid, "/queue/messages", evt);
+            // ★ 新增：推送红点给目标用户，让底部导航栏实时刷新
+            badgeService.pushBadgeIfOnline(uid);
         }
     }
 
